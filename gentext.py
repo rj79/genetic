@@ -72,17 +72,24 @@ class Evaluator:
 
 class ElementWiseCombinator:
     def combine(self, p1, p2):
-        genes = ''
-        for i in range(len(p1.get_genes())):
+        combined_genes = []
+        p1g = p1.get_genes()
+        p2g = p2.get_genes()
+        for i in range(len(p1g)):
             if random.random() < 0.5:
-                genes += p1.get_genes()[i]
+                combined_genes.append(p1g[i])
             else:
-                genes += p2.get_genes()[i]
-        return genes
+                combined_genes.append(p2g[i])
+        return combined_genes
         
 class BreakpointCombinator:
-    def combine(self, i1, i2):
-        pass
+    def combine(self, p1, p2):
+        combined_genes = []
+        p1g = p1.get_genes()
+        p2g = p2.get_genes()
+        n = random.randint(0, len(p1g) - 1)
+        return p1g[0:n] + p2g[n:]
+
     
 class Population:
     def __init__(self, size, isize, evaluator):
@@ -175,8 +182,8 @@ class Engine:
 
 genes = list('win')
 evaluator = Evaluator(genes)
-combinator = ElementWiseCombinator()
+combinator = BreakpointCombinator()
 population = Population(8, len(genes), evaluator)
 engine = Engine(population)
-engine.set_combinator(combinator)
+#engine.set_combinator(combinator)
 engine.run()
