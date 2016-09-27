@@ -5,17 +5,26 @@ import time
 
 MUTATION_P = 0.01
 
-def create_random_gene():
-    return random.choice(string.ascii_lowercase + ' ')
-    
-def create_random_individual(length):
-    genes = []
-    for i in range(length):
-        genes += create_random_gene()
-    return Individual(genes)
+
+class NullIndividual:
+    def __init__(self):
+        pass
+
+    def set_individual(self, ind):
+        pass
+
+    def action(self):
+        pass
 
 class Individual:
-    def __init__(self, genes=None):
+    def __init__(self, engine=None, genes=None):
+
+        self.custom_object = None
+
+        if engine is None:
+            raise RuntimeError('Engine not set')
+
+        self.engine = engine
         if genes is None:
             self.genes = []
         else:
@@ -23,9 +32,21 @@ class Individual:
         self.fitness = 0
         self.selection_limit = 0
 
+    def get_genes_length(self):
+        return len(self.genes)
+
+    def custom_action():
+        self.custom_object.action()
+
+    def set_custom_object(self, obj):
+        self.custom_object = obj
+
     def get_genes(self):
         return self.genes
-    
+
+    def get_gene(self, index):
+        return self.genes[index]
+
     def set_fitness(self, fitness):
         self.fitness = fitness
 
@@ -34,20 +55,20 @@ class Individual:
 
     def get_selection_limit(self):
         return self.selection_limit
-        
+
     def mutate(self):
         new_genes = []
         for i in range(len(self.genes)):
             if random.random() < MUTATION_P:
-                new_genes.append(create_random_gene())
+                new_genes.append(self.engine.client.create_gene())
             else:
                 new_genes.append(self.genes[i])
         self.genes = new_genes
-        
+
     def __str__(self):
         return '(I {} {})'.format(self.genes, self.fitness)
 
-    
+
 class Evaluator:
     def __init__(self, target):
         self.target = target
@@ -63,7 +84,7 @@ class Evaluator:
 
         if ind.get_genes() == self.target:
             self.done = True
-            
+
         return fitness
 
     def finished(self):
@@ -81,7 +102,7 @@ class ElementWiseCombinator:
             else:
                 combined_genes.append(p2g[i])
         return combined_genes
-        
+
 class BreakpointCombinator:
     def combine(self, p1, p2):
         combined_genes = []
@@ -90,13 +111,22 @@ class BreakpointCombinator:
         n = random.randint(0, len(p1g) - 1)
         return p1g[0:n] + p2g[n:]
 
-    
+
 class Population:
-    def __init__(self, size, isize, evaluator):
+    def __init__(self, engine, evaluator):
+        if engine is None:
+            raise RuntimeError('Engine not set')
+        self.engine = engine
         self.individuals = []
         self.evaluator = evaluator
-        for i in range(size):
-            self.individuals.append(create_random_individual(isize))
+
+    def add(self, ind):
+        self.individuals.append(ind)
+
+    def custom_action(self):
+        pass
+        #for ind in self.individuals:
+        #   ind.custom_object.action(cust)
 
     def evaluate_all(self, engine):
         sum = 0
@@ -105,7 +135,7 @@ class Population:
             fitness = self.evaluator.evaluate(ind)
             sum += fitness
             ind.set_selection_limit(sum)
-            
+
             if fitness > max_fitness:
                 max_fitness = fitness
 
@@ -113,7 +143,7 @@ class Population:
 
     def finished(self):
         return evaluator.finished()
-    
+
     def set_individuals(self, individuals):
         self.individuals = individuals[:]
 
@@ -123,23 +153,60 @@ class Population:
                 return ind
         raise RuntimeException()
 
+    def for_each_custom_call(self, clbl):
+        for ind in self.individuals:
+            clbl(ind.custom_object)
+
     def get_size(self):
         return len(self.individuals)
 
     def __str__(self):
-       return '<P {}>'.format(', '.join([str(ind) for ind in self.individuals])) 
-    
+       return '<P {}>'.format(', '.join([str(ind) for ind in self.individuals]))
+
 class Engine:
-    def __init__(self, population):
+    def __init__(self, client, evaluator):
+        if client is None:
+            raise RuntimeError('Client must be set')
+        # TODO: Check that client has the right callable functions
+        # ... code here ...
+        if evaluator is None:
+            raise RuntimeError('Evaluator not set')
+
+        self.client = client
+        self.evaluator = evaluator
+        self.gene_size = 0
         self.generation = 1
         self.fitness_sum = 0
-        self.population = population
+        self.population = None
         self.done = False
         self.combinator = ElementWiseCombinator()
 
+    def get_gene_size(self):
+        return self.gene_size
+
+    def populate_random(self, pop_size, gene_size):
+        if self.population is not None:
+            raise RuntimeError('Populate can only be called once')
+
+        self.population = Population(self, self.evaluator)
+        self.gene_size = gene_size
+
+        for i in range(pop_size):
+            genes = []
+            for j in range(gene_size):
+                genes.append(self.client.create_gene())
+            self.population.add(self.create_individual(genes))
+
+    def create_individual(self, new_genes):
+        obj = self.client.create_individual()
+        ind = Individual(self, new_genes)
+        ind.set_custom_object(obj)
+        obj.set_individual(ind)
+        return ind
+
     def select_parent(self):
         p = random.random() * self.fitness_sum
-        return population.select_individual(p)
+        return self.population.select_individual(p)
 
     def set_fitness_sum(self, sum):
         self.fitness_sum = sum
@@ -153,37 +220,65 @@ class Engine:
 
     def evolve(self):
         new_individuals = []
-        
+
         for i in range(self.population.get_size()):
             p1, p2 = self.select_parents()
             new_genes = self.combinator.combine(p1, p2)
-            new_individual = Individual(new_genes)
+            new_individual = self.create_individual(new_genes)
             new_individual.mutate()
-            print('{} x {} -> {}'.format(str(p1), str(p2), str(new_individual)))
+            #print('{} x {} -> {}'.format(str(p1), str(p2), str(new_individual)))
             new_individuals.append(new_individual)
 
-        self.population.set_individuals(new_individuals)            
+        self.population.set_individuals(new_individuals)
 
     def set_combinator(self, combinator):
         self.combinator = combinator
 
+    def for_each_custom_call(self, clbl):
+        self.population.for_each_custom_call(clbl)
+
+    def run_once(self):
+        self.client.on_generation_begin(self.generation)
+        #self.population.custom_action()
+        self.population.evaluate_all(self)
+        self.evolve()
+        self.generation += 1
+
     def run(self):
-        fitness = 0
         self.done = False
         while not self.done:
-            print('Generation {}'.format(self.generation))
-            self.population.evaluate_all(self)
-            self.evolve()
-            self.generation += 1
+            self.run_once()
             if self.population.finished():
                 break
 #            time.sleep(1)
 
 
-genes = list('win')
-evaluator = Evaluator(genes)
-combinator = BreakpointCombinator()
-population = Population(8, len(genes), evaluator)
-engine = Engine(population)
-#engine.set_combinator(combinator)
-engine.run()
+class BaseClient:
+    def on_generation_begin(self, generation):
+        pass
+
+    def create_gene(self):
+        raise NotImplementedError('You must subclass BaseClient')
+
+    def create_individual(self):
+        raise NotImplementedError('You must subclass BaseClient')
+
+
+class Client(BaseClient):
+    def on_generation_begin(self, generation):
+        print('Generation {}'.format(generation))
+
+    def create_gene(self):
+        return random.choice(string.ascii_lowercase + ' ')
+
+    def create_individual(self):
+        return NullIndividual()
+
+
+if __name__ == '__main__':
+    genes = list('win')
+    client = Client()
+    evaluator = Evaluator(genes)
+    engine = Engine(client, evaluator)
+    engine.populate_random(8, len(genes))
+    engine.run()
