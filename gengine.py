@@ -182,12 +182,8 @@ class Engine:
         return ind
 
     def select_parents(self):
-        timeout = 1000
         p1 = self.population.select_individual()
         p2 = self.population.select_individual()
-        while p1 == p2 and timeout > 0:
-            p2 = self.population.select_individual()
-            timeout -= 1
         return p1, p2
 
     def evolve(self):
@@ -232,8 +228,10 @@ class Engine:
         # Normalize fitness to range [0, 1]
         i = 0
         for ind in self.population.get_individuals():
-            ind.set_fitness(fitness_list[i] / max_fitness)
+            fitness_list[i] /= max_fitness
+            ind.set_fitness(fitness_list[i])
             i += 1
+        print('\n'.join(['{:.5f}'.format(x) for x in reversed(sorted(fitness_list))]))
 
     def start(self):
         if not self.started:
