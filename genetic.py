@@ -261,12 +261,6 @@ class Client(gengine.BaseClient):
             # Boost objects that completed early
             fitness /= (pow(arrival_factor, 3))
 
-            # Give general boost to all that completed
-            # First make sure fitness > 1, otherwise
-            # multiplying by self will make things worse
-            fitness += 1.0
-            fitness *= fitness
-
             if self.best_time is None or obj.arrival_time < self.best_time:
                 self.best_time = obj.arrival_time
 
