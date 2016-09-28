@@ -18,7 +18,7 @@ GREEN = (0, 255, 0)
 BLUE = (0, 0, 255)
 
 RADIUS = 10
-FORCE_FACTOR = 2.0
+FORCE_FACTOR = 10.0
 
 MAX_COUNT = 200
 counter = 0
@@ -108,10 +108,11 @@ class Thing:
         pass
 
     def draw(self, surf):
-        #print('DRAW', self.pos)
         pygame.draw.circle(surf, self.color, [int(u) for u in self.pos.tuple()], self.radius)
         pygame.draw.circle(surf, WHITE, [int(u) for u in self.pos.tuple()], self.radius, 1)
 
+    def __str__(self):
+        return '(Thing {})'.format(str(self.pos))
 
 class Obstacle(Thing):
     def __init__(self):
@@ -124,26 +125,6 @@ class Target(Thing):
         super().__init__()
         self.color = GREEN
 
-
-class Evaluator:
-    def __init__(self, target=None):
-        self.target = target
-        self.done = False
-
-    def evaluate(self, ind):
-        fitness = 1
-        ind.set_fitness(fitness)
-
-        # TODO: Calculate done condition
-        # ... code here...
-
-        d = ind.custom_object.pos.distance(self.target.pos)
-        return fitness
-
-    def finished(self):
-        return self.done
-
-
 class Creature(Thing):
     def __init__(self, dna=None):
         super().__init__()
@@ -151,11 +132,6 @@ class Creature(Thing):
         self.failed = False
         self.completed = False
         self.color = BLUE
-        #if dna is None:
-        #    self.dna = DNA()
-        #else:
-        #    self.dna = dna.clone()
-
         self.ind = None
 
     def set_individual(self, ind):
@@ -190,6 +166,8 @@ class Creature(Thing):
         global counter
         if counter >= self.ind.get_genes_length():
             self.failed = True
+            self.accel = 0
+            self.velocity = 0
         else:
             self.accel = self.ind.get_gene(counter)
 
@@ -200,11 +178,32 @@ class Creature(Thing):
 
 
 class Client(gentext.BaseClient):
+    def __init__(self):
+        self.width = 0
+        self.height = 0
+
     def create_gene(self):
-        return self.create_random_unit_vector().scaled(FORCE_FACTOR)
+        size = random() * FORCE_FACTOR
+        return self.create_random_unit_vector().scaled(size)
 
     def create_individual(self):
-        return Creature()
+        c = Creature()
+        c.set_pos(self.width / 2, self.height - 100)
+        return c
+
+    def evaluate(self, ind):
+        fitness = 1
+        ind.set_fitness(fitness)
+
+        # TODO: Calculate done condition
+        # ... code here...
+
+        d = ind.custom_object.pos.distance(self.target.pos)
+        if d < 1:
+            d = 1
+
+        fitness = 1 / (d * d)
+        return fitness
 
     def create_random_unit_vector(self):
         angle = random() * 2 * pi;
@@ -224,26 +223,21 @@ class Client(gentext.BaseClient):
                 thing.fail()
 
     def update(self, thing, dt):
-        #print('UPDATE', thing, dt)
         thing.update(dt)
 
     def draw(self, thing):
         thing.draw(self.screen)
 
     def main_loop(self):
-        self.target = Target()
-        self.evaluator = Evaluator(self.target)
-        self.engine = gentext.Engine(self, self.evaluator)
-        self.engine.populate_random(10, 50)
-
         pygame.init()
         self.width = 600
         self.height = 600
         self.screen = pygame.display.set_mode((self.width, self.height))
         clock = pygame.time.Clock()
-        startx = self.width / 2
-        starty = self.height - 100
-        self.engine.for_each_custom_call(lambda x: x.set_pos(startx, starty))
+        self.target = Target()
+        self.engine = gentext.Engine(self)
+        self.engine.populate_random(50, 200)
+
         done = False
 
         self.target.set_radius(20)
@@ -272,16 +266,10 @@ class Client(gentext.BaseClient):
             counter += 1
             if counter == self.engine.get_gene_size():
                 self.engine.run_once()
-                self.engine.for_each_custom_call(lambda x: x.set_pos(self.width/2, self.height/2))
+                #self.engine.for_each_custom_call(lambda x: x.set_pos(self.width/2, self.height/2))
                 counter = 0
 
-            print(counter)
-            #
-                #population.combine(target)
-                #population.mutate()
-                #population.set_position(startx, starty)
-                #population.draw(screen)
-
+            #print(counter)
             self.screen.fill(BLACK)
             self.engine.for_each_custom_call(self.draw)
             for ob in self.obstacles:

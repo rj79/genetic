@@ -66,29 +66,7 @@ class Individual:
         self.genes = new_genes
 
     def __str__(self):
-        return '(I {} {})'.format(self.genes, self.fitness)
-
-
-class Evaluator:
-    def __init__(self, target):
-        self.target = target
-        self.done = False
-
-    def evaluate(self, ind):
-        fitness = 1
-        genes = ind.get_genes()
-        for i in range(len(genes)):
-            if genes[i] == self.target[i]:
-                fitness *= 4
-        ind.set_fitness(fitness)
-
-        if ind.get_genes() == self.target:
-            self.done = True
-
-        return fitness
-
-    def finished(self):
-        return self.done
+        return '(I {} {})'.format(', '.join([str(x) for x in self.genes]), self.fitness)
 
 
 class ElementWiseCombinator:
@@ -103,7 +81,7 @@ class ElementWiseCombinator:
                 combined_genes.append(p2g[i])
         return combined_genes
 
-class BreakpointCombinator:
+class RandomBreakpointCombinator:
     def combine(self, p1, p2):
         combined_genes = []
         p1g = p1.get_genes()
@@ -113,12 +91,11 @@ class BreakpointCombinator:
 
 
 class Population:
-    def __init__(self, engine, evaluator):
+    def __init__(self, engine):
         if engine is None:
             raise RuntimeError('Engine not set')
         self.engine = engine
         self.individuals = []
-        self.evaluator = evaluator
 
     def add(self, ind):
         self.individuals.append(ind)
@@ -128,21 +105,8 @@ class Population:
         #for ind in self.individuals:
         #   ind.custom_object.action(cust)
 
-    def evaluate_all(self, engine):
-        sum = 0
-        max_fitness = 0
-        for ind in self.individuals:
-            fitness = self.evaluator.evaluate(ind)
-            sum += fitness
-            ind.set_selection_limit(sum)
-
-            if fitness > max_fitness:
-                max_fitness = fitness
-
-        engine.set_fitness_sum(sum)
-
-    def finished(self):
-        return evaluator.finished()
+    def get_individuals(self):
+        return self.individuals
 
     def set_individuals(self, individuals):
         self.individuals = individuals[:]
@@ -164,16 +128,13 @@ class Population:
        return '<P {}>'.format(', '.join([str(ind) for ind in self.individuals]))
 
 class Engine:
-    def __init__(self, client, evaluator):
+    def __init__(self, client):
         if client is None:
             raise RuntimeError('Client must be set')
         # TODO: Check that client has the right callable functions
         # ... code here ...
-        if evaluator is None:
-            raise RuntimeError('Evaluator not set')
 
         self.client = client
-        self.evaluator = evaluator
         self.gene_size = 0
         self.generation = 1
         self.fitness_sum = 0
@@ -188,7 +149,7 @@ class Engine:
         if self.population is not None:
             raise RuntimeError('Populate can only be called once')
 
-        self.population = Population(self, self.evaluator)
+        self.population = Population(self)
         self.gene_size = gene_size
 
         for i in range(pop_size):
@@ -230,6 +191,8 @@ class Engine:
             new_individuals.append(new_individual)
 
         self.population.set_individuals(new_individuals)
+        #for individual in new_individuals:
+        #    print(individual, individual.custom_object)
 
     def set_combinator(self, combinator):
         self.combinator = combinator
@@ -237,10 +200,23 @@ class Engine:
     def for_each_custom_call(self, clbl):
         self.population.for_each_custom_call(clbl)
 
+    def evaluate_all(self, engine):
+        sum = 0
+        max_fitness = 0
+        for ind in self.population.get_individuals():
+            fitness = self.client.evaluate(ind)
+            sum += fitness
+            ind.set_selection_limit(sum)
+
+            if fitness > max_fitness:
+                max_fitness = fitness
+
+        self.set_fitness_sum(sum)
+
     def run_once(self):
         self.client.on_generation_begin(self.generation)
         #self.population.custom_action()
-        self.population.evaluate_all(self)
+        self.evaluate_all(self)
         self.evolve()
         self.generation += 1
 
@@ -248,14 +224,16 @@ class Engine:
         self.done = False
         while not self.done:
             self.run_once()
-            if self.population.finished():
+            if self.client.is_stop_requested():
                 break
-#            time.sleep(1)
 
 
 class BaseClient:
     def on_generation_begin(self, generation):
         pass
+
+    def evaluate(self, ind):
+        raise NotImplementedError('You must sublcass BaseClient')
 
     def create_gene(self):
         raise NotImplementedError('You must subclass BaseClient')
@@ -263,8 +241,16 @@ class BaseClient:
     def create_individual(self):
         raise NotImplementedError('You must subclass BaseClient')
 
+    def is_stop_requested(self):
+        return False
 
-class Client(BaseClient):
+
+class ExampleClient(BaseClient):
+    def __init__(self, target_text):
+        super().__init__()
+        self.target = list(target_text)
+        self.solution_found = False
+
     def on_generation_begin(self, generation):
         print('Generation {}'.format(generation))
 
@@ -274,11 +260,25 @@ class Client(BaseClient):
     def create_individual(self):
         return NullIndividual()
 
+    def is_stop_requested(self):
+        return self.solution_found
+
+    def evaluate(self, ind):
+        fitness = 1
+        genes = ind.get_genes()
+        for i in range(len(genes)):
+            if genes[i] == self.target[i]:
+                fitness *= 4
+        ind.set_fitness(fitness)
+
+        if ind.get_genes() == self.target:
+            self.solution_found = True
+
+        return fitness
+
 
 if __name__ == '__main__':
-    genes = list('win')
-    client = Client()
-    evaluator = Evaluator(genes)
-    engine = Engine(client, evaluator)
-    engine.populate_random(8, len(genes))
+    client = ExampleClient('win')
+    engine = Engine(client)
+    engine.populate_random(8, 3)
     engine.run()
