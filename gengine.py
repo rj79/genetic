@@ -48,10 +48,10 @@ class Individual:
             raise RuntimeError('Fitness must be in range [0, 1] was', fitness)
         self.fitness = fitness
 
-    def mutate(self):
+    def mutate(self, probability):
         new_genes = []
         for i in range(len(self.genes)):
-            if random.random() < MUTATION_P:
+            if random.random() < probability:
                 new_genes.append(self.engine.client.create_gene())
             else:
                 new_genes.append(self.genes[i])
@@ -102,7 +102,7 @@ class Population:
     def select_individual(self):
         # Monte-Carlo style accept-reject algorithm
         # Assumes that fitness is normalized between 0 and 1
-        timeout = 10000
+        timeout = 1000000
         while timeout > 0:
             i = random.randint(0, len(self.individuals) - 1)
             u = random.random()
@@ -131,18 +131,37 @@ class Engine:
         # ... code here ...
 
         self.client = client
-        self.gene_size = 0
         self.generation = 1
         self.population = None
         self.done = False
         self.combinator = ElementWiseCombinator()
-        self.has_population_parameters = False
+        self.started = False
+        self.pop_size = 1
+        self.gene_size = 1
+        self.mutate_probability = 0.01
+
+    def get_configuration(self):
+        config = self.client.get_configuration()
+        # TODO: Rewrite this more elegantly
+        try:
+            self.pop_size = config['population_size']
+        except:
+            pass
+
+        try:
+            self.gene_size = config['dna_size']
+        except:
+            pass
+
+        try:
+            self.mutate_probability = config['mutation_p']
+        except:
+            pass
 
     def get_gene_size(self):
         return self.gene_size
 
-    def populate_random(self, parameters):
-        pop_size, gene_size = parameters[0], parameters[1]
+    def populate_random(self, pop_size, gene_size):
         if self.population is not None:
             raise RuntimeError('Populate can only be called once')
 
@@ -178,7 +197,7 @@ class Engine:
             p1, p2 = self.select_parents()
             new_genes = self.combinator.combine(p1, p2)
             new_individual = self.create_individual(new_genes)
-            new_individual.mutate()
+            new_individual.mutate(self.mutate_probability)
             new_individuals.append(new_individual)
 
         self.population.set_individuals(new_individuals)
@@ -191,7 +210,7 @@ class Engine:
 
     def evaluate_all(self, engine):
         fitness_list = []
-        max_fitness = -1000000.0
+        max_fitness = 0
 
         # Collect fitness value for each individual as well as
         # find maximum fitness in the population
@@ -216,17 +235,22 @@ class Engine:
             ind.set_fitness(fitness_list[i] / max_fitness)
             i += 1
 
+    def start(self):
+        if not self.started:
+            self.started = True
+            self.get_configuration()
+            self.populate_random(self.pop_size, self.gene_size)
+            self.client.on_generation_begin(self.generation)
+
     def run_once(self):
-        if not self.has_population_parameters:
-            self.populate_random(self.client.get_population_parameters())
-            self.has_population_parameters = True
-            self.client.on_generation_begin(self.generation)
-        else:
-            self.client.on_generation_end(self.generation)
-            self.generation += 1
-            self.client.on_generation_begin(self.generation)
-            self.evaluate_all(self)
-            self.evolve()
+        if not self.started:
+            raise RuntimeError('You must start the engine first')
+
+        self.evaluate_all(self)
+        self.client.on_generation_end(self.generation)
+        self.evolve()
+        self.generation += 1
+        self.client.on_generation_begin(self.generation)
 
     def run(self):
         self.done = False
@@ -240,8 +264,8 @@ class BaseClient:
     """
     Should return a tuple with (population_size, gene_size)
     """
-    def get_population_parameters(self):
-        return (1, 1)
+    def get_configuration(self):
+        return {}
 
     def create_gene(self):
         raise NotImplementedError('You must subclass BaseClient')
@@ -269,8 +293,9 @@ class ExampleClient(BaseClient):
         self.solution_found = False
         self.generation = 0
 
-    def get_population_parameters(self):
-        return (8, len(self.target))
+    def get_configuration(self):
+        return {'population_size': 8,
+                'dna_size': len(self.target)}
 
     def on_generation_begin(self, generation):
         #print('Generation {}'.format(generation))
@@ -306,4 +331,5 @@ class ExampleClient(BaseClient):
 if __name__ == '__main__':
     client = ExampleClient('win')
     engine = Engine(client)
+    engine.start()
     engine.run()

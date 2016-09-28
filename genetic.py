@@ -18,10 +18,9 @@ GREEN = (0, 255, 0)
 BLUE = (0, 0, 255)
 
 RADIUS = 10
-FORCE_FACTOR = 10.0
+FORCE_FACTOR = 15.0
 
 MAX_COUNT = 200
-counter = 0
 
 class Vector2d:
     def __init__(self, x=0, y=0):
@@ -89,23 +88,23 @@ class Thing:
     def set_radius(self, radius):
         self.radius = radius
 
-    def pre_update(self, dt):
+    def pre_update(counter, dt):
         pass
 
-    def update(self, dt):
-        self.pre_update(dt)
+    def post_update(self, counter, dt):
+        pass
+
+    def update(self, counter, dt):
+        self.pre_update(counter, dt)
 
         if self.active:
-            drag = self.velocity.scaled(-0.1*dt)
+            drag = self.velocity.scaled(-0.01 * dt)
             self.apply_force(drag)
             self.velocity += self.accel.scaled(dt)
             self.pos += self.velocity
             self.accel = Vector2d()
 
-        self.post_update(dt)
-
-    def post_update(self, dt):
-        pass
+        self.post_update(counter, dt)
 
     def draw(self, surf):
         pygame.draw.circle(surf, self.color, [int(u) for u in self.pos.tuple()], self.radius)
@@ -130,7 +129,11 @@ class Creature(Thing):
     def __init__(self, dna=None):
         super().__init__()
         self.color = BLUE
-        self.reset()
+        self.fitness = 0
+        self.crashed = False
+        self.completed = False
+        self.ind = None
+        self.arrival_time = None
 
     def set_individual(self, ind):
         self.ind = ind
@@ -138,34 +141,23 @@ class Creature(Thing):
     def complete(self, t):
         if not self.completed:
             self.completed = True
-            self.complete_time = t
+            self.arrival_time = t
 
-    def fail(self, t):
-        if not self.failed:
-            self.failed = True
-            self.fail_time = t
+    def crash(self, t):
+        if not self.crashed:
+            self.crashed = True
+            self.arrival_time = t
 
-    def reset(self):
-        self.fitness = 0
-        self.failed = False
-        self.completed = False
-        self.ind = None
-        self.complete_time = 100000
-        self.fail_time = 0
+    def has_completed(self):
+        return self.completed
 
-    def action(self):
-        self.pre_update(0)
+    def has_crashed(self):
+        return self.crashed
 
-    def pre_update(self, dt):
-        global counter
-        if counter >= self.ind.get_genes_length():
-            self.failed = True
-            self.accel = 0
-            self.velocity = 0
-        else:
-            self.accel = self.ind.get_gene(counter)
+    def pre_update(self, counter, dt):
+        self.accel = self.ind.get_gene(counter)
 
-        if self.failed or self.completed:
+        if self.crashed or self.completed:
             self.active = False
 
 
@@ -173,10 +165,12 @@ class Client(gentext.BaseClient):
     def __init__(self):
         self.width = 0
         self.height = 0
-        self.completed = 0
+        self.complete_count = 0
+        self.now = 0
 
-    def get_population_parameters(self):
-        return (50, 250)
+    def get_configuration(self):
+        return {'population_size': 50,
+                'dna_size': 250}
 
     def create_gene(self):
         size = random() * FORCE_FACTOR
@@ -188,21 +182,41 @@ class Client(gentext.BaseClient):
         return c
 
     def evaluate(self, ind):
-        fitness = 1
-        ind.set_fitness(fitness)
         obj = ind.custom_object
 
         d = obj.pos.distance(self.target.pos)
+
+        # Avoid division by 0.
         if d < 1:
             d = 1
 
-        fitness = 1 / (d * d * d)
-        if obj.failed:
-            fitness /= 10
-        if obj.completed:
-            fitness *= 10
-            #fitness *= 1 / (obj.complete_time)
-            self.completed += 1
+        # Fitness will be between 0 and 1
+        fitness = 1 / (d * d)
+
+        # The arrival factor is the arrival time normalized
+        # between 0 and 1, where 0 represents the start of
+        # the simulation and 1 the end of the simulation.
+        if obj.arrival_time is None:
+            obj.arrival_time = self.now
+        arrival_factor = obj.arrival_time / self.now
+
+        if obj.has_crashed():
+            # Give more penalty to objects that crashed early
+            fitness *= pow(arrival_factor, 3)
+        if obj.has_completed():
+            # Boost objects that completed early
+            fitness /= (pow(arrival_factor, 2))
+
+            # Give general boost to all that completed
+            # First make sure fitness > 1, otherwise
+            # multiplying by self will make things worse
+            fitness += 1.0
+            fitness *= fitness
+            #v = max(obj.velocity.size(), 0.001)
+            #print(v)
+            #fitness *= 1 / (v * v)
+            self.complete_count += 1
+
         return fitness
 
     def create_random_unit_vector(self):
@@ -210,26 +224,26 @@ class Client(gentext.BaseClient):
         return Vector2d(cos(angle), sin(angle))
 
     def on_generation_begin(self, generation):
-        print("Generation {} begin".format(generation))
-        self.completed = 0
+        #print("Generation {} begin".format(generation))
+        self.complete_count = 0
 
     def on_generation_end(self, generation):
         print("Generation {} end".format(generation))
-        print('  Completed {}'.format(self.completed))
+        print('  Completed {}'.format(self.complete_count))
 
     def check_pos(self, thing, t):
         if thing.pos.x < 0 or thing.pos.x > self.width or thing.pos.y < 0 or thing.pos.y > self.height:
-            thing.fail(t)
+            thing.crash(t)
 
         if thing.pos.distance(self.target.pos) < thing.radius + self.target.radius:
             thing.complete(t)
 
         for obstacle in self.obstacles:
             if thing.pos.distance(obstacle.pos) < thing.radius + obstacle.radius:
-                thing.fail(t)
+                thing.crash(t)
 
-    def update(self, thing, dt):
-        thing.update(dt)
+    def update(self, thing, counter, dt):
+        thing.update(counter, dt)
 
     def draw(self, thing):
         thing.draw(self.screen)
@@ -252,13 +266,18 @@ class Client(gentext.BaseClient):
         ob1 = Obstacle()
         ob1.set_radius(100)
         ob1.set_pos(self.width/2, self.height/2)
-        self.obstacles.append(ob1)
 
-        global counter
+        ob2 = Obstacle()
+        ob2.set_radius(30)
+        ob2.set_pos(self.width/2 + 140, self.height/2 - 160)
+
+        self.obstacles.append(ob1)
+        self.obstacles.append(ob2)
 
         epoch = pygame.time.get_ticks()
 
-        self.engine.run_once()
+        self.engine.start()
+        counter = 0
         while not done:
             events = pygame.event.get()
             for event in events:
@@ -267,10 +286,10 @@ class Client(gentext.BaseClient):
                         done = True
 
             dt = clock.tick() / 1000
-            t = (pygame.time.get_ticks() - epoch) / 1000
+            self.now = (pygame.time.get_ticks() - epoch) / 1000
 
-            self.engine.for_each_custom_call(lambda x: self.update(x, dt))
-            self.engine.for_each_custom_call(lambda x: self.check_pos(x, t))
+            self.engine.for_each_custom_call(lambda x: self.update(x, counter, dt))
+            self.engine.for_each_custom_call(lambda x: self.check_pos(x, self.now))
 
             counter += 1
             if counter == self.engine.get_gene_size():
