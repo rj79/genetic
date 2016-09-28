@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
-from math import sqrt, pow, cos, sin, pi
+from math import pow, cos, sin, pi
 from random import random, randrange, choice, randint
+from utils import Clock, Vector2D
+import gengine
 import pygame
 import time
-import gengine
+
 
 BLACK = (0, 0, 0)
 WHITE = (255, 255, 255)
@@ -14,55 +16,12 @@ BLUE = (0, 0, 255)
 RADIUS = 10
 FORCE_FACTOR = 15.0
 
-class Vector2d:
-    def __init__(self, x=0, y=0):
-        self.x = x
-        self.y = y
-
-    def __add__(self, other):
-        return Vector2d(self.x + other.x,
-                        self.y + other.y)
-
-    def __sub__(self, other):
-        return Vector2d(self.x - other.x,
-                        self.y - other.y)
-
-    def __iadd__(self, other):
-        self.x += other.x
-        self.y += other.y
-        return self
-
-    def __isub__(self, other):
-        self.x -= other.x
-        self.y -= other.y
-        return self
-
-    def size(self):
-        return sqrt(pow(self.x, 2) + pow(self.y, 2))
-
-    def scaled(self, s):
-        return Vector2d(self.x * s, self.y * s)
-
-    def normalized(self):
-        return self.scaled(1 / self.size())
-
-    def distance(self, other):
-        return sqrt(pow(other.x - self.x, 2) + pow(other.y - self.y, 2))
-
-    def clone(self):
-        return Vector2d(self.x, self.y)
-
-    def tuple(self):
-        return (self.x, self.y)
-
-    def __str__(self):
-        return '({:.2f}, {:.2f})'.format(self.x, self.y)
 
 class Thing:
     def __init__(self):
-        self.pos = Vector2d()
-        self.velocity = Vector2d()
-        self.accel = Vector2d()
+        self.pos = Vector2D()
+        self.velocity = Vector2D()
+        self.accel = Vector2D()
         self.color = WHITE
         self.radius = RADIUS
         self.active = True
@@ -87,7 +46,7 @@ class Thing:
         pass
 
     def update(self, counter, dt):
-        self.accel = Vector2d()
+        self.accel = Vector2D()
         self.pre_update(counter, dt)
 
         if self.active:
@@ -105,6 +64,7 @@ class Thing:
 
     def __str__(self):
         return '(Thing {})'.format(str(self.pos))
+
 
 class Obstacle(Thing):
     def __init__(self):
@@ -153,47 +113,6 @@ class Creature(Thing):
         if self.crashed or self.completed:
             self.active = False
 
-
-class Clock:
-    def __init__(self):
-        self.reset()
-
-    def _read(self):
-        return pygame.time.get_ticks() / 1000
-
-    def is_paused(self):
-        return self.paused
-
-    def start(self):
-        self.epoch = self._read()
-        self.old_now = self.epoch
-
-    def reset(self):
-        self.now = 0
-        self.old_now = 0
-        self.elapsed_time = 0
-        self.elapsed_dt = 0
-        self.epoch = 0
-        self.paused = False
-
-    def get_time(self):
-        self.old_now = self.now
-        self.now = self._read() - self.epoch
-        return self.now
-
-    def get_dt(self):
-        return self.now - self.old_now
-
-    def toggle_pause(self):
-        if not self.paused:
-            now = self._read()
-            self.elapsed_time = now - self.epoch
-            self.elapsed_dt = now - self.now
-        else:
-            now = self._read()
-            self.old_now = now - self.elapsed_dt
-            self.epoch = now - self.elapsed_time
-        self.paused = not self.paused
 
 class Client(gengine.BaseClient):
     def __init__(self):
@@ -261,7 +180,7 @@ class Client(gengine.BaseClient):
 
     def create_random_unit_vector(self):
         angle = random() * 2 * pi;
-        return Vector2d(cos(angle), sin(angle))
+        return Vector2D(cos(angle), sin(angle))
 
     def on_generation_begin(self, generation):
         #print("Generation {} begin".format(generation))
@@ -303,13 +222,13 @@ class Client(gengine.BaseClient):
                 if thing:
                     self.dragging = thing
                     pos = event.pos
-                    self.drag_offset = self.dragging.pos - Vector2d(pos[0], pos[1])
+                    self.drag_offset = self.dragging.pos - Vector2D(pos[0], pos[1])
             if event.type == pygame.MOUSEBUTTONUP:
                 self.dragging = None
             if event.type == pygame.MOUSEMOTION:
                 if self.dragging:
                     pos = event.pos
-                    x = Vector2d(pos[0], pos[1])
+                    x = Vector2D(pos[0], pos[1])
                     self.dragging.pos = x + self.drag_offset
 
                     # Invalidate best time if target was moved
@@ -317,7 +236,7 @@ class Client(gengine.BaseClient):
                         self.best_time = None
 
     def find_thing(self, pos):
-        x = Vector2d(pos[0], pos[1])
+        x = Vector2D(pos[0], pos[1])
         for thing in self.draggables:
             if x.distance(thing.pos) < thing.radius:
                 return thing
