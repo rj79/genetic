@@ -6,7 +6,6 @@ import gengine
 import pygame
 import time
 
-
 BLACK = (0, 0, 0)
 WHITE = (255, 255, 255)
 RED = (255, 0, 0)
@@ -54,7 +53,6 @@ class Thing:
             self.apply_force(drag)
             self.velocity += self.accel.scaled(dt)
             self.pos += self.velocity
-            #print(self.velocity)
 
         self.post_update(counter, dt)
 
@@ -183,7 +181,6 @@ class Client(gengine.BaseClient):
         return Vector2D(cos(angle), sin(angle))
 
     def on_generation_begin(self, generation):
-        #print("Generation {} begin".format(generation))
         self.complete_count = 0
 
     def on_generation_end(self, generation):
