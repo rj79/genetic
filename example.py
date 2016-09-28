@@ -5,12 +5,6 @@ import pygame
 import time
 import gengine
 
-def rmap(val, smin, smax, tmin, tmax):
-    return (smin + (val - smin) / (smax - smin) * (tmax - tmin) + tmin)
-
-def rlimit(val, low, high):
-    return min(max(val, low), high)
-
 BLACK = (0, 0, 0)
 WHITE = (255, 255, 255)
 RED = (255, 0, 0)
@@ -19,8 +13,6 @@ BLUE = (0, 0, 255)
 
 RADIUS = 10
 FORCE_FACTOR = 15.0
-
-MAX_COUNT = 200
 
 class Vector2d:
     def __init__(self, x=0, y=0):
@@ -234,7 +226,7 @@ class Client(gengine.BaseClient):
         c.set_pos(self.width / 2, self.height - 100)
         return c
 
-    def evaluate(self, ind):
+    def evaluate_fitness(self, ind):
         obj = ind.custom_object
 
         d = obj.pos.distance(self.target.pos)

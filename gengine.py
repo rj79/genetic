@@ -98,8 +98,10 @@ class Population:
     def set_individuals(self, individuals):
         self.individuals = individuals[:]
 
-    """Select an individual based on fitness distribution"""
     def select_individual(self):
+        """
+        Select an individual based on fitness distribution
+        """
         # Monte-Carlo style accept-reject algorithm
         # Assumes that fitness is normalized between 0 and 1
         timeout = 1000000
@@ -161,7 +163,7 @@ class Engine:
     def get_gene_size(self):
         return self.gene_size
 
-    def populate_random(self, pop_size, gene_size):
+    def _populate_random(self, pop_size, gene_size):
         if self.population is not None:
             raise RuntimeError('Populate can only be called once')
 
@@ -172,27 +174,27 @@ class Engine:
             genes = []
             for j in range(gene_size):
                 genes.append(self.client.create_gene())
-            self.population.add(self.create_individual(genes))
+            self.population.add(self._create_individual(genes))
 
-    def create_individual(self, new_genes):
+    def _create_individual(self, new_genes):
         obj = self.client.create_individual()
         ind = Individual(self, new_genes)
         ind.set_custom_object(obj)
         obj.set_individual(ind)
         return ind
 
-    def select_parents(self):
+    def _select_parents(self):
         p1 = self.population.select_individual()
         p2 = self.population.select_individual()
         return p1, p2
 
-    def evolve(self):
+    def _evolve(self):
         new_individuals = []
 
         for i in range(self.population.get_size()):
-            p1, p2 = self.select_parents()
+            p1, p2 = self._select_parents()
             new_genes = self.combinator.combine(p1, p2)
-            new_individual = self.create_individual(new_genes)
+            new_individual = self._create_individual(new_genes)
             new_individual.mutate(self.mutate_probability)
             new_individuals.append(new_individual)
 
@@ -204,14 +206,14 @@ class Engine:
     def for_each_custom_call(self, clbl):
         self.population.for_each_custom_call(clbl)
 
-    def evaluate_all(self, engine):
+    def _evaluate_all(self, engine):
         fitness_list = []
         max_fitness = 0
 
         # Collect fitness value for each individual as well as
         # find maximum fitness in the population
         for ind in self.population.get_individuals():
-            fitness = self.client.evaluate(ind)
+            fitness = self.client.evaluate_fitness(ind)
 
             if fitness < 0:
                 raise RuntimeError('Fitness can not be negative')
@@ -237,16 +239,16 @@ class Engine:
         if not self.started:
             self.started = True
             self.get_configuration()
-            self.populate_random(self.pop_size, self.gene_size)
+            self._populate_random(self.pop_size, self.gene_size)
             self.client.on_generation_begin(self.generation)
 
     def run_once(self):
         if not self.started:
             raise RuntimeError('You must start the engine first')
 
-        self.evaluate_all(self)
+        self._evaluate_all(self)
         self.client.on_generation_end(self.generation)
-        self.evolve()
+        self._evolve()
         self.generation += 1
         self.client.on_generation_begin(self.generation)
 
@@ -260,31 +262,66 @@ class Engine:
 
 class BaseClient:
     """
-    Should return a tuple with (population_size, gene_size)
+    Clients of the engine should subclass and override the
+    methods of this class.
+    For meaningful operation, at least the following need to be
+    overriden:
+      * create_gene
+      * create_individual
+      * evaluate_fitness
     """
     def get_configuration(self):
+        """
+        Should return a dictionary with configuration options.
+        If an empty dictionary is returned, the default configuration
+        is used.
+        """
         return {}
 
     def create_gene(self):
+        """
+        Called by the engine when it needs to generate a gene.
+        Should return a single gene.
+        """
         raise NotImplementedError('You must subclass BaseClient')
 
     def create_individual(self):
+        """
+        Should return an object that uses the dna.
+        """
         raise NotImplementedError('You must subclass BaseClient')
 
     def on_generation_begin(self, generation):
+        """
+        Called by the engine when a new generation starts.
+        """
         pass
 
     def on_generation_end(self, generation):
+        """
+        Called by the engine when a generation ends.
+        """
         pass
 
-    def evaluate(self, ind):
+    def evaluate_fitness(self, ind):
+        """
+        Should calculate and return the fitness of the individual.
+        """
         raise NotImplementedError('You must sublcass BaseClient')
 
     def is_stop_requested(self):
+        """
+        Called by the engine during run() to determine if the
+        simulation should stop.
+        """
         return False
 
 
 class ExampleClient(BaseClient):
+    """
+    A very simple client that uses the engine.
+    """
+
     def __init__(self, target_text):
         super().__init__()
         self.target = list(target_text)
@@ -296,11 +333,9 @@ class ExampleClient(BaseClient):
                 'dna_size': len(self.target)}
 
     def on_generation_begin(self, generation):
-        #print('Generation {}'.format(generation))
         self.generation = generation
 
     def on_generation_end(self, generation):
-        #print('Generation end {}'.format(generation))
         pass
 
     def create_gene(self):
@@ -312,13 +347,12 @@ class ExampleClient(BaseClient):
     def is_stop_requested(self):
         return self.solution_found
 
-    def evaluate(self, ind):
-        fitness = 1
+    def evaluate_fitness(self, ind):
+        fitness = 2
         genes = ind.get_genes()
         for i in range(len(genes)):
             if genes[i] == self.target[i]:
-                fitness += 10
-        fitnes = fitness * fitness
+                fitness *= fitness
 
         if ind.get_genes() == self.target:
             self.solution_found = True
@@ -327,7 +361,7 @@ class ExampleClient(BaseClient):
         return fitness
 
 if __name__ == '__main__':
-    client = ExampleClient('win')
+    client = ExampleClient('to be or not to be')
     engine = Engine(client)
     engine.start()
     engine.run()
