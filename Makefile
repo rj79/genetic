@@ -13,6 +13,9 @@ DONE_FILES += $(DONE_UPGRADE_PIP)
 all: $(DONE_REQS)
 	$(PYTHON) example.py
 
+test: $(DONE_REQS)
+	$(PYTHON) gengine.py
+
 $(DONE_REQS): $(DONE_UPGRADE_PIP)
 	$(PIP) install -r $(REQ) && touch $@
 
