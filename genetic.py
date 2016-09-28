@@ -125,39 +125,33 @@ class Target(Thing):
         super().__init__()
         self.color = GREEN
 
+
 class Creature(Thing):
     def __init__(self, dna=None):
         super().__init__()
-        self.fitness = 0
-        self.failed = False
-        self.completed = False
         self.color = BLUE
-        self.ind = None
+        self.reset()
 
     def set_individual(self, ind):
         self.ind = ind
 
-    def set_dna(self, dna):
-        pass
-        #self.dna = dna.clone()
+    def complete(self, t):
+        if not self.completed:
+            self.completed = True
+            self.complete_time = t
 
-    def complete(self):
-        self.completed = True
-        self.complete_time = counter
-
-    def mutate(self):
-        #self.dna = self.dna.mutated()
-        pass
-
-    def fail(self):
-        self.failed = True
-        self.fail_time = counter
+    def fail(self, t):
+        if not self.failed:
+            self.failed = True
+            self.fail_time = t
 
     def reset(self):
         self.fitness = 0
         self.failed = False
         self.completed = False
-        self.active = True
+        self.ind = None
+        self.complete_time = 100000
+        self.fail_time = 0
 
     def action(self):
         self.pre_update(0)
@@ -174,13 +168,15 @@ class Creature(Thing):
         if self.failed or self.completed:
             self.active = False
 
-        #self.apply_force(self.velocity.scaled(-0.1))
-
 
 class Client(gentext.BaseClient):
     def __init__(self):
         self.width = 0
         self.height = 0
+        self.completed = 0
+
+    def get_population_parameters(self):
+        return (50, 250)
 
     def create_gene(self):
         size = random() * FORCE_FACTOR
@@ -194,15 +190,19 @@ class Client(gentext.BaseClient):
     def evaluate(self, ind):
         fitness = 1
         ind.set_fitness(fitness)
+        obj = ind.custom_object
 
-        # TODO: Calculate done condition
-        # ... code here...
-
-        d = ind.custom_object.pos.distance(self.target.pos)
+        d = obj.pos.distance(self.target.pos)
         if d < 1:
             d = 1
 
-        fitness = 1 / (d * d)
+        fitness = 1 / (d * d * d)
+        if obj.failed:
+            fitness /= 10
+        if obj.completed:
+            fitness *= 10
+            #fitness *= 1 / (obj.complete_time)
+            self.completed += 1
         return fitness
 
     def create_random_unit_vector(self):
@@ -210,17 +210,23 @@ class Client(gentext.BaseClient):
         return Vector2d(cos(angle), sin(angle))
 
     def on_generation_begin(self, generation):
-        print("Generation {}".format(generation))
+        print("Generation {} begin".format(generation))
+        self.completed = 0
 
-    def check_pos(self, thing):
+    def on_generation_end(self, generation):
+        print("Generation {} end".format(generation))
+        print('  Completed {}'.format(self.completed))
+
+    def check_pos(self, thing, t):
         if thing.pos.x < 0 or thing.pos.x > self.width or thing.pos.y < 0 or thing.pos.y > self.height:
-            thing.fail()
-        if thing.pos.distance(self.target.pos) < 2 * RADIUS:
-            thing.complete()
+            thing.fail(t)
+
+        if thing.pos.distance(self.target.pos) < thing.radius + self.target.radius:
+            thing.complete(t)
 
         for obstacle in self.obstacles:
             if thing.pos.distance(obstacle.pos) < thing.radius + obstacle.radius:
-                thing.fail()
+                thing.fail(t)
 
     def update(self, thing, dt):
         thing.update(dt)
@@ -236,7 +242,6 @@ class Client(gentext.BaseClient):
         clock = pygame.time.Clock()
         self.target = Target()
         self.engine = gentext.Engine(self)
-        self.engine.populate_random(50, 200)
 
         done = False
 
@@ -251,6 +256,9 @@ class Client(gentext.BaseClient):
 
         global counter
 
+        epoch = pygame.time.get_ticks()
+
+        self.engine.run_once()
         while not done:
             events = pygame.event.get()
             for event in events:
@@ -259,17 +267,17 @@ class Client(gentext.BaseClient):
                         done = True
 
             dt = clock.tick() / 1000
+            t = (pygame.time.get_ticks() - epoch) / 1000
 
             self.engine.for_each_custom_call(lambda x: self.update(x, dt))
-            self.engine.for_each_custom_call(self.check_pos)
+            self.engine.for_each_custom_call(lambda x: self.check_pos(x, t))
 
             counter += 1
             if counter == self.engine.get_gene_size():
                 self.engine.run_once()
-                #self.engine.for_each_custom_call(lambda x: x.set_pos(self.width/2, self.height/2))
+                epoch = pygame.time.get_ticks()
                 counter = 0
 
-            #print(counter)
             self.screen.fill(BLACK)
             self.engine.for_each_custom_call(self.draw)
             for ob in self.obstacles:

@@ -30,13 +30,9 @@ class Individual:
         else:
             self.genes = genes[:]
         self.fitness = 0
-        self.selection_limit = 0
 
     def get_genes_length(self):
         return len(self.genes)
-
-    def custom_action():
-        self.custom_object.action()
 
     def set_custom_object(self, obj):
         self.custom_object = obj
@@ -48,13 +44,9 @@ class Individual:
         return self.genes[index]
 
     def set_fitness(self, fitness):
+        if fitness < 0 or fitness > 1:
+            raise RuntimeError('Fitness must be in range [0, 1] was', fitness)
         self.fitness = fitness
-
-    def set_selection_limit(self, limit):
-        self.selection_limit = limit
-
-    def get_selection_limit(self):
-        return self.selection_limit
 
     def mutate(self):
         new_genes = []
@@ -100,22 +92,26 @@ class Population:
     def add(self, ind):
         self.individuals.append(ind)
 
-    def custom_action(self):
-        pass
-        #for ind in self.individuals:
-        #   ind.custom_object.action(cust)
-
     def get_individuals(self):
         return self.individuals
 
     def set_individuals(self, individuals):
         self.individuals = individuals[:]
 
-    def select_individual(self, p):
-        for ind in self.individuals:
-            if p < ind.get_selection_limit():
-                return ind
-        raise RuntimeException()
+    """Select an individual based on fitness distribution"""
+    def select_individual(self):
+        # Monte-Carlo style accept-reject algorithm
+        # Assumes that fitness is normalized between 0 and 1
+        timeout = 10000
+        while timeout > 0:
+            i = random.randint(0, len(self.individuals) - 1)
+            u = random.random()
+            if u <= self.individuals[i].fitness:
+                return self.individuals[i]
+            timeout -= 1
+        # We can get here in case all individuals have 0 fitness
+        # so just pick any.
+        return self.individuals[random.randint(0, len(self.individuals) - 1)]
 
     def for_each_custom_call(self, clbl):
         for ind in self.individuals:
@@ -137,15 +133,16 @@ class Engine:
         self.client = client
         self.gene_size = 0
         self.generation = 1
-        self.fitness_sum = 0
         self.population = None
         self.done = False
         self.combinator = ElementWiseCombinator()
+        self.has_population_parameters = False
 
     def get_gene_size(self):
         return self.gene_size
 
-    def populate_random(self, pop_size, gene_size):
+    def populate_random(self, parameters):
+        pop_size, gene_size = parameters[0], parameters[1]
         if self.population is not None:
             raise RuntimeError('Populate can only be called once')
 
@@ -165,18 +162,13 @@ class Engine:
         obj.set_individual(ind)
         return ind
 
-    def select_parent(self):
-        p = random.random() * self.fitness_sum
-        return self.population.select_individual(p)
-
-    def set_fitness_sum(self, sum):
-        self.fitness_sum = sum
-
     def select_parents(self):
-        p1 = self.select_parent()
-        p2 = self.select_parent()
-        while p1 == p2:
-            p2 = self.select_parent()
+        timeout = 1000
+        p1 = self.population.select_individual()
+        p2 = self.population.select_individual()
+        while p1 == p2 and timeout > 0:
+            p2 = self.population.select_individual()
+            timeout -= 1
         return p1, p2
 
     def evolve(self):
@@ -187,12 +179,9 @@ class Engine:
             new_genes = self.combinator.combine(p1, p2)
             new_individual = self.create_individual(new_genes)
             new_individual.mutate()
-            #print('{} x {} -> {}'.format(str(p1), str(p2), str(new_individual)))
             new_individuals.append(new_individual)
 
         self.population.set_individuals(new_individuals)
-        #for individual in new_individuals:
-        #    print(individual, individual.custom_object)
 
     def set_combinator(self, combinator):
         self.combinator = combinator
@@ -201,24 +190,43 @@ class Engine:
         self.population.for_each_custom_call(clbl)
 
     def evaluate_all(self, engine):
-        sum = 0
-        max_fitness = 0
+        fitness_list = []
+        max_fitness = -1000000.0
+
+        # Collect fitness value for each individual as well as
+        # find maximum fitness in the population
         for ind in self.population.get_individuals():
             fitness = self.client.evaluate(ind)
-            sum += fitness
-            ind.set_selection_limit(sum)
+
+            if fitness < 0:
+                raise RuntimeError('Fitness can not be negative')
+
+            fitness_list.append(fitness)
 
             if fitness > max_fitness:
                 max_fitness = fitness
 
-        self.set_fitness_sum(sum)
+        # Avoid division by zero below
+        if max_fitness == 0:
+            max_fitness = 1
+
+        # Normalize fitness to range [0, 1]
+        i = 0
+        for ind in self.population.get_individuals():
+            ind.set_fitness(fitness_list[i] / max_fitness)
+            i += 1
 
     def run_once(self):
-        self.client.on_generation_begin(self.generation)
-        #self.population.custom_action()
-        self.evaluate_all(self)
-        self.evolve()
-        self.generation += 1
+        if not self.has_population_parameters:
+            self.populate_random(self.client.get_population_parameters())
+            self.has_population_parameters = True
+            self.client.on_generation_begin(self.generation)
+        else:
+            self.client.on_generation_end(self.generation)
+            self.generation += 1
+            self.client.on_generation_begin(self.generation)
+            self.evaluate_all(self)
+            self.evolve()
 
     def run(self):
         self.done = False
@@ -229,17 +237,26 @@ class Engine:
 
 
 class BaseClient:
-    def on_generation_begin(self, generation):
-        pass
-
-    def evaluate(self, ind):
-        raise NotImplementedError('You must sublcass BaseClient')
+    """
+    Should return a tuple with (population_size, gene_size)
+    """
+    def get_population_parameters(self):
+        return (1, 1)
 
     def create_gene(self):
         raise NotImplementedError('You must subclass BaseClient')
 
     def create_individual(self):
         raise NotImplementedError('You must subclass BaseClient')
+
+    def on_generation_begin(self, generation):
+        pass
+
+    def on_generation_end(self, generation):
+        pass
+
+    def evaluate(self, ind):
+        raise NotImplementedError('You must sublcass BaseClient')
 
     def is_stop_requested(self):
         return False
@@ -250,9 +267,18 @@ class ExampleClient(BaseClient):
         super().__init__()
         self.target = list(target_text)
         self.solution_found = False
+        self.generation = 0
+
+    def get_population_parameters(self):
+        return (8, len(self.target))
 
     def on_generation_begin(self, generation):
-        print('Generation {}'.format(generation))
+        #print('Generation {}'.format(generation))
+        self.generation = generation
+
+    def on_generation_end(self, generation):
+        #print('Generation end {}'.format(generation))
+        pass
 
     def create_gene(self):
         return random.choice(string.ascii_lowercase + ' ')
@@ -268,17 +294,16 @@ class ExampleClient(BaseClient):
         genes = ind.get_genes()
         for i in range(len(genes)):
             if genes[i] == self.target[i]:
-                fitness *= 4
-        ind.set_fitness(fitness)
+                fitness += 10
+        fitnes = fitness * fitness
 
         if ind.get_genes() == self.target:
             self.solution_found = True
+            print('Found solution {} in {} generations.'.format(self.target, self.generation))
 
         return fitness
-
 
 if __name__ == '__main__':
     client = ExampleClient('win')
     engine = Engine(client)
-    engine.populate_random(8, 3)
     engine.run()
