@@ -3,9 +3,6 @@ import random
 import string
 import time
 
-MUTATION_P = 0.01
-
-
 class NullIndividual:
     def __init__(self):
         pass
@@ -73,6 +70,7 @@ class ElementWiseCombinator:
                 combined_genes.append(p2g[i])
         return combined_genes
 
+
 class RandomBreakpointCombinator:
     def combine(self, p1, p2):
         combined_genes = []
@@ -115,15 +113,16 @@ class Population:
         # so just pick any.
         return self.individuals[random.randint(0, len(self.individuals) - 1)]
 
-    def for_each_custom_call(self, clbl):
+    def for_each_custom_call(self, fn):
         for ind in self.individuals:
-            clbl(ind.custom_object)
+            fn(ind.custom_object)
 
     def get_size(self):
         return len(self.individuals)
 
     def __str__(self):
        return '<P {}>'.format(', '.join([str(ind) for ind in self.individuals]))
+
 
 class Engine:
     def __init__(self, client):
@@ -203,8 +202,8 @@ class Engine:
     def set_combinator(self, combinator):
         self.combinator = combinator
 
-    def for_each_custom_call(self, clbl):
-        self.population.for_each_custom_call(clbl)
+    def for_each_custom_call(self, fn):
+        self.population.for_each_custom_call(fn)
 
     def _evaluate_all(self, engine):
         fitness_list = []
