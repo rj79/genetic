@@ -161,6 +161,44 @@ class Creature(Thing):
             self.active = False
 
 
+class Clock:
+    def __init__(self):
+        self.now = 0
+        self.old_now = 0
+        self.elapsed_time = 0
+        self.elapsed_dt = 0
+        self.epoch = 0
+        self.paused = False
+
+    def _read(self):
+        return pygame.time.get_ticks() / 1000
+
+    def is_paused(self):
+        return self.paused
+
+    def start(self):
+        self.epoch = self._read()
+        self.old_now = self.epoch
+
+    def get_time(self):
+        self.old_now = self.now
+        self.now = self._read() - self.epoch
+        return self.now
+
+    def get_dt(self):
+        return self.now - self.old_now
+
+    def toggle_pause(self):
+        if not self.paused:
+            now = self._read()
+            self.elapsed_time = now - self.epoch
+            self.elapsed_dt = now - self.now
+        else:
+            now = self._read()
+            self.old_now = now - self.elapsed_dt
+            self.epoch = now - self.elapsed_time
+        self.paused = not self.paused
+
 class Client(gengine.BaseClient):
     def __init__(self):
         self.width = 0
@@ -168,8 +206,11 @@ class Client(gengine.BaseClient):
         self.complete_count = 0
         self.now = 0
 
+    def get_time(self):
+        return pygame.time.get_ticks() / 1000
+
     def get_configuration(self):
-        return {'population_size': 50,
+        return {'population_size': 40,
                 'dna_size': 250}
 
     def create_gene(self):
@@ -212,9 +253,7 @@ class Client(gengine.BaseClient):
             # multiplying by self will make things worse
             fitness += 1.0
             fitness *= fitness
-            #v = max(obj.velocity.size(), 0.001)
-            #print(v)
-            #fitness *= 1 / (v * v)
+
             self.complete_count += 1
 
         return fitness
@@ -253,7 +292,7 @@ class Client(gengine.BaseClient):
         self.width = 600
         self.height = 600
         self.screen = pygame.display.set_mode((self.width, self.height))
-        clock = pygame.time.Clock()
+        clock = Clock()
         self.target = Target()
         self.engine = gengine.Engine(self)
 
@@ -269,13 +308,12 @@ class Client(gengine.BaseClient):
 
         ob2 = Obstacle()
         ob2.set_radius(30)
-        ob2.set_pos(self.width/2 + 140, self.height/2 - 160)
+        ob2.set_pos(self.width/2 + 140, self.height/2 - 170)
 
         self.obstacles.append(ob1)
         self.obstacles.append(ob2)
 
-        epoch = pygame.time.get_ticks()
-
+        clock.start()
         self.engine.start()
         counter = 0
         while not done:
@@ -284,18 +322,21 @@ class Client(gengine.BaseClient):
                 if event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_ESCAPE:
                         done = True
+                    elif event.key == pygame.K_SPACE:
+                        clock.toggle_pause()
 
-            dt = clock.tick() / 1000
-            self.now = (pygame.time.get_ticks() - epoch) / 1000
+            if not clock.is_paused():
+                self.now = clock.get_time()
+                dt = clock.get_dt()
 
-            self.engine.for_each_custom_call(lambda x: self.update(x, counter, dt))
-            self.engine.for_each_custom_call(lambda x: self.check_pos(x, self.now))
+                self.engine.for_each_custom_call(lambda x: self.update(x, counter, dt))
+                self.engine.for_each_custom_call(lambda x: self.check_pos(x, self.now))
 
-            counter += 1
-            if counter == self.engine.get_gene_size():
-                self.engine.run_once()
-                epoch = pygame.time.get_ticks()
-                counter = 0
+                counter += 1
+                if counter == self.engine.get_gene_size():
+                    self.engine.run_once()
+                    self.epoch = self.get_time()
+                    counter = 0
 
             self.screen.fill(BLACK)
             self.engine.for_each_custom_call(self.draw)

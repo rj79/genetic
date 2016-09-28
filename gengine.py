@@ -231,7 +231,7 @@ class Engine:
             fitness_list[i] /= max_fitness
             ind.set_fitness(fitness_list[i])
             i += 1
-        print('\n'.join(['{:.5f}'.format(x) for x in reversed(sorted(fitness_list))]))
+        #print('\n'.join(['{:.5f}'.format(x) for x in reversed(sorted(fitness_list))]))
 
     def start(self):
         if not self.started:
