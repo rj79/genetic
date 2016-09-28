@@ -278,7 +278,8 @@ class Client(gengine.BaseClient):
     def on_generation_end(self, generation):
         print("Generation {} end".format(generation))
         print('  Completed: {}'.format(self.complete_count))
-        print('  Best time: {}'.format(self.best_time))
+        if self.best_time:
+            print('  Best time: {:.3f}'.format(self.best_time))
 
     def check_pos(self, thing, t):
         if thing.pos.x < 0 or thing.pos.x > self.width or thing.pos.y < 0 or thing.pos.y > self.height:
@@ -318,6 +319,10 @@ class Client(gengine.BaseClient):
                     pos = event.pos
                     x = Vector2d(pos[0], pos[1])
                     self.dragging.pos = x + self.drag_offset
+
+                    # Invalidate best time if target was moved
+                    if self.dragging == self.target:
+                        self.best_time = None
 
     def find_thing(self, pos):
         x = Vector2d(pos[0], pos[1])
