@@ -3,7 +3,7 @@ from math import sqrt, pow, cos, sin, pi
 from random import random, randrange, choice, randint
 import pygame
 import time
-import gentext
+import gengine
 
 def rmap(val, smin, smax, tmin, tmax):
     return (smin + (val - smin) / (smax - smin) * (tmax - tmin) + tmin)
@@ -161,7 +161,7 @@ class Creature(Thing):
             self.active = False
 
 
-class Client(gentext.BaseClient):
+class Client(gengine.BaseClient):
     def __init__(self):
         self.width = 0
         self.height = 0
@@ -255,7 +255,7 @@ class Client(gentext.BaseClient):
         self.screen = pygame.display.set_mode((self.width, self.height))
         clock = pygame.time.Clock()
         self.target = Target()
-        self.engine = gentext.Engine(self)
+        self.engine = gengine.Engine(self)
 
         done = False
 
