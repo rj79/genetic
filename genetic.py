@@ -95,14 +95,15 @@ class Thing:
         pass
 
     def update(self, counter, dt):
+        self.accel = Vector2d()
         self.pre_update(counter, dt)
 
         if self.active:
-            drag = self.velocity.scaled(-0.01 * dt)
+            drag = self.velocity.scaled(-2)
             self.apply_force(drag)
             self.velocity += self.accel.scaled(dt)
             self.pos += self.velocity
-            self.accel = Vector2d()
+            #print(self.velocity)
 
         self.post_update(counter, dt)
 
@@ -155,7 +156,7 @@ class Creature(Thing):
         return self.crashed
 
     def pre_update(self, counter, dt):
-        self.accel = self.ind.get_gene(counter)
+        self.apply_force(self.ind.get_gene(counter))
 
         if self.crashed or self.completed:
             self.active = False
@@ -163,12 +164,7 @@ class Creature(Thing):
 
 class Clock:
     def __init__(self):
-        self.now = 0
-        self.old_now = 0
-        self.elapsed_time = 0
-        self.elapsed_dt = 0
-        self.epoch = 0
-        self.paused = False
+        self.reset()
 
     def _read(self):
         return pygame.time.get_ticks() / 1000
@@ -179,6 +175,14 @@ class Clock:
     def start(self):
         self.epoch = self._read()
         self.old_now = self.epoch
+
+    def reset(self):
+        self.now = 0
+        self.old_now = 0
+        self.elapsed_time = 0
+        self.elapsed_dt = 0
+        self.epoch = 0
+        self.paused = False
 
     def get_time(self):
         self.old_now = self.now
@@ -205,13 +209,21 @@ class Client(gengine.BaseClient):
         self.height = 0
         self.complete_count = 0
         self.now = 0
+        self.clock = Clock()
+
+        self.draggables = []
+        self.dragging = None
+
+        self.exit_requested = False
+        self.best_time = None
 
     def get_time(self):
         return pygame.time.get_ticks() / 1000
 
     def get_configuration(self):
-        return {'population_size': 40,
-                'dna_size': 250}
+        return {'population_size': 100,
+                'dna_size': 250,
+                'mutation_p': 0.001}
 
     def create_gene(self):
         size = random() * FORCE_FACTOR
@@ -239,6 +251,7 @@ class Client(gengine.BaseClient):
         # the simulation and 1 the end of the simulation.
         if obj.arrival_time is None:
             obj.arrival_time = self.now
+
         arrival_factor = obj.arrival_time / self.now
 
         if obj.has_crashed():
@@ -246,7 +259,7 @@ class Client(gengine.BaseClient):
             fitness *= pow(arrival_factor, 3)
         if obj.has_completed():
             # Boost objects that completed early
-            fitness /= (pow(arrival_factor, 2))
+            fitness /= (pow(arrival_factor, 3))
 
             # Give general boost to all that completed
             # First make sure fitness > 1, otherwise
@@ -254,8 +267,10 @@ class Client(gengine.BaseClient):
             fitness += 1.0
             fitness *= fitness
 
-            self.complete_count += 1
+            if self.best_time is None or obj.arrival_time < self.best_time:
+                self.best_time = obj.arrival_time
 
+            self.complete_count += 1
         return fitness
 
     def create_random_unit_vector(self):
@@ -268,7 +283,8 @@ class Client(gengine.BaseClient):
 
     def on_generation_end(self, generation):
         print("Generation {} end".format(generation))
-        print('  Completed {}'.format(self.complete_count))
+        print('  Completed: {}'.format(self.complete_count))
+        print('  Best time: {}'.format(self.best_time))
 
     def check_pos(self, thing, t):
         if thing.pos.x < 0 or thing.pos.x > self.width or thing.pos.y < 0 or thing.pos.y > self.height:
@@ -287,16 +303,42 @@ class Client(gengine.BaseClient):
     def draw(self, thing):
         thing.draw(self.screen)
 
+    def handle_input(self):
+        events = pygame.event.get()
+        for event in events:
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_ESCAPE:
+                    self.exit_requested = True
+                elif event.key == pygame.K_SPACE:
+                    self.clock.toggle_pause()
+            if event.type == pygame.MOUSEBUTTONDOWN:
+                thing = self.find_thing(event.pos)
+                if thing:
+                    self.dragging = thing
+                    pos = event.pos
+                    self.drag_offset = self.dragging.pos - Vector2d(pos[0], pos[1])
+            if event.type == pygame.MOUSEBUTTONUP:
+                self.dragging = None
+            if event.type == pygame.MOUSEMOTION:
+                if self.dragging:
+                    pos = event.pos
+                    x = Vector2d(pos[0], pos[1])
+                    self.dragging.pos = x + self.drag_offset
+
+    def find_thing(self, pos):
+        x = Vector2d(pos[0], pos[1])
+        for thing in self.draggables:
+            if x.distance(thing.pos) < thing.radius:
+                return thing
+        return None
+
     def main_loop(self):
         pygame.init()
         self.width = 600
         self.height = 600
         self.screen = pygame.display.set_mode((self.width, self.height))
-        clock = Clock()
         self.target = Target()
         self.engine = gengine.Engine(self)
-
-        done = False
 
         self.target.set_radius(20)
         self.target.set_pos(self.width * 2 / 3, 2 * self.target.radius)
@@ -308,26 +350,24 @@ class Client(gengine.BaseClient):
 
         ob2 = Obstacle()
         ob2.set_radius(30)
-        ob2.set_pos(self.width/2 + 140, self.height/2 - 170)
+        ob2.set_pos(self.width/2 + 150, self.height/2 - 170)
 
         self.obstacles.append(ob1)
         self.obstacles.append(ob2)
 
-        clock.start()
+        self.draggables.extend(self.obstacles)
+        self.draggables.append(self.target)
+
+        self.clock.start()
         self.engine.start()
         counter = 0
-        while not done:
-            events = pygame.event.get()
-            for event in events:
-                if event.type == pygame.KEYDOWN:
-                    if event.key == pygame.K_ESCAPE:
-                        done = True
-                    elif event.key == pygame.K_SPACE:
-                        clock.toggle_pause()
+        while not self.exit_requested:
 
-            if not clock.is_paused():
-                self.now = clock.get_time()
-                dt = clock.get_dt()
+            self.handle_input()
+
+            if not self.clock.is_paused():
+                self.now = self.clock.get_time()
+                dt = self.clock.get_dt()
 
                 self.engine.for_each_custom_call(lambda x: self.update(x, counter, dt))
                 self.engine.for_each_custom_call(lambda x: self.check_pos(x, self.now))
@@ -335,7 +375,8 @@ class Client(gengine.BaseClient):
                 counter += 1
                 if counter == self.engine.get_gene_size():
                     self.engine.run_once()
-                    self.epoch = self.get_time()
+                    self.clock.reset()
+                    self.clock.start()
                     counter = 0
 
             self.screen.fill(BLACK)
