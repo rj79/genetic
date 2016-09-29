@@ -345,9 +345,10 @@ class Client(gengine.BaseClient):
             self.target.draw(self.screen)
 
             self.draw_text('p={:.4f}'.format(self.engine.get_mutation_probability()), 4, 4)
-            self.draw_text('completed: {}'.format(self.latest_complete_count), 4, 24)
+            self.draw_text('Generation: {}'.format(generation), 4, 24)
+            self.draw_text('completed: {}'.format(self.latest_complete_count), 4, 44)
             if self.best_time:
-                self.draw_text('best time: {:.3f} s'.format(self.best_time), 4, 44)
+                self.draw_text('best time: {:.3f} s'.format(self.best_time), 4, 64)
             pygame.display.flip()
             time.sleep(0.01)
 
@@ -369,6 +370,7 @@ class Client(gengine.BaseClient):
         self.draggables = []
         self.draggables.append(self.target)
         self.draggables.extend(self.obstacles)
+        self.best_time = None
 
     def on_evaluated(self, generation):
         self.latest_complete_count = self.complete_count
