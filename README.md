@@ -22,10 +22,10 @@ a gui. Type 'make test' or 'python3 gengine.py' to run it.
 
 # Using the engine
 The engine performs the generic task of combining the genes of parents and
-mutating individuals. It does not know however how to create or interpret the
-genes. Nor does it know how to evaluate the fitness of an individual. These are
-all things that are unique for each application and therefore you need to
-define.
+mutating genes of individuals. It does not know however how to create or
+interpret the genes. Nor does it know how to evaluate the fitness of an
+individual. These are all things that are unique for each application and
+therefore you need to define.
 
 The way to do this is to create a custom client class which is a subclass of
 engine.BaseClient in which you define the missing pieces.
@@ -40,13 +40,18 @@ The engine does not know or care.
 individual.
 * on_init(): The engine will call this method once before anything else. It
 allows you to do any initialization before the simulation starts.
-* on_new_generation(): The engine calls this method repeatedly for each new generation. Here you can implement your simulation, including visualization.
-This is also the place to do your event handling. When you are done simulating
-the current generation, just return. The engine will call the method over and over, each time with a new generation until you call engine.request_stop(), at which point the program terminates.
+* on_new_generation(): Here you implement your simulation, including
+visualization. The engine calls this method repeatedly for each new generation.
+This is also the place to do your input or event handling. When you are done
+simulating the current generation, just return. The engine will call the method
+over and over, each time with a new generation until you call
+engine.request_stop(), at which point the program terminates.
 * evaluate_fitness(): The engine calls this method for each individual for each
-generation. This happens after on_new_generation() has returned. You should calculate a fitness value based on the unique critera for your application and
-return it. The fitness value must be a positive number. The greater the fitness value, the greater the chance the engine will pick that individual as a parent
-for the next iteration.
+generation. This happens after on_new_generation() has returned. You should
+calculate a fitness value based on the unique critera for your application and
+return it. The fitness value must be a non negative number. The greater the
+fitness value, the greater the chance the engine will pick that individual as a
+parent for the next iteration.
 
 You also likely want to override get_configuration(), which
 should return a dictionary with configuration key/value pairs. If an
