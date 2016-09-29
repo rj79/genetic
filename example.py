@@ -17,6 +17,11 @@ YELLOW = (255, 255, 0)
 FORCE_FACTOR = 15.0
 
 MUTATION_SPEEDS = [0, 0.0001, 0.0002, 0.0005, 0.001, 0.002, 0.005, 0.01, 0.02, 0.5, 1.0]
+LEFT_BUTTON = 1
+MIDDLE_BUTTON = 2
+RIGHT_BUTTON = 3
+SCROLL_UP = 4
+SCROLL_DOWN = 5
 
 class Thing:
     def __init__(self):
@@ -70,7 +75,7 @@ class Obstacle(Thing):
     def __init__(self):
         super().__init__()
         self.color = RED
-
+        self.radius = 20
 
 class Target(Thing):
     def __init__(self):
@@ -220,6 +225,7 @@ class Client(gengine.BaseClient):
     def handle_input(self):
         events = pygame.event.get()
         for event in events:
+            #print(event)
             if event.type == pygame.QUIT:
                 self.exit_requested = True
             elif event.type == pygame.KEYDOWN:
@@ -233,10 +239,28 @@ class Client(gengine.BaseClient):
                     self.change_mutation(-1)
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 thing = self.find_thing(event.pos)
-                if thing:
-                    self.dragging = thing
-                    pos = event.pos
-                    self.drag_offset = self.dragging.pos - Vector2D(pos[0], pos[1])
+                if event.button == LEFT_BUTTON:
+                    if thing:
+                        self.dragging = thing
+                        pos = event.pos
+                        self.drag_offset = self.dragging.pos - Vector2D(pos[0], pos[1])
+                elif event.button == RIGHT_BUTTON:
+                    if thing is None:
+                        new_obstacle = Obstacle()
+                        new_obstacle.set_pos(event.pos[0], event.pos[1])
+                        self.obstacles.append(new_obstacle)
+                        self.draggables.append(new_obstacle)
+                    else:
+                        if thing != self.target:
+                            self.obstacles.remove(thing)
+                            self.draggables.remove(thing)
+                elif event.button == SCROLL_UP:
+                    if thing is not None:
+                        thing.radius = constrain(thing.radius + 10, 10, 100)
+                elif event.button == SCROLL_DOWN:
+                    if thing is not None:
+                        thing.radius = constrain(thing.radius - 10, 10, 100)
+
             elif event.type == pygame.MOUSEBUTTONUP:
                 self.dragging = None
             elif event.type == pygame.MOUSEMOTION:
