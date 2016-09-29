@@ -18,7 +18,13 @@ YELLOW = (255, 255, 0)
 FORCE_FACTOR = 40.0
 DRAG_FACTOR = 1
 
-MUTATION_SPEEDS = [0, 0.0001, 0.0002, 0.0005, 0.001, 0.002, 0.005, 0.01, 0.02, 0.5, 1.0]
+MUTATION_SPEEDS = [0,
+                   0.0001, 0.0002, 0.0005,
+                   0.001, 0.002, 0.005,
+                   0.01, 0.02, 0.05,
+                   0.1, 0.2, 0.5,
+                   1.0]
+
 LEFT_BUTTON = 1
 MIDDLE_BUTTON = 2
 RIGHT_BUTTON = 3
