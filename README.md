@@ -11,6 +11,8 @@ An interactive example application that uses the engine is also included.
 * Remove an obstacle by right-clicking on it
 * Change the size of an obstacle or the target using the scroll wheel
 * Increase or decrease the mutation probability by pressing M or N
+* Store the obstacle and target to file pressing F4
+* Load the obstacle and target from file pressing F9
 
 # Running the examples
 Just type make to run the interactive example application.
