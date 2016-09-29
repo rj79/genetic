@@ -3,6 +3,13 @@ import random
 import string
 import time
 
+def constrain(num, minimum, maximum):
+    if num < minimum:
+        num = minimum
+    if num > maximum:
+        num = maximum
+    return num
+
 class NullIndividual:
     def __init__(self):
         pass
@@ -158,6 +165,9 @@ class Engine:
             self.mutate_probability = config['mutation_p']
         except:
             pass
+
+    def set_mutation_probability(self, p):
+        self.mutate_probability = limit(p, 0, 1)
 
     def get_gene_size(self):
         return self.gene_size
