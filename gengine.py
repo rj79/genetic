@@ -133,16 +133,15 @@ class Engine:
         # ... code here ...
 
         self.client = client
+        self.stop_requested = False
         self.generation = 1
         self.population = None
-        self.done = False
         self.combinator = ElementWiseCombinator()
-        self.started = False
-        self.pop_size = 1
+        self.pop_size = 3
         self.gene_size = 1
         self.mutate_probability = 0.01
 
-    def get_configuration(self):
+    def _get_configuration(self):
         config = self.client.get_configuration()
         # TODO: Rewrite this more elegantly
         try:
@@ -160,11 +159,23 @@ class Engine:
         except:
             pass
 
+    def request_stop(self):
+        """
+        A client can call this method to request that the engine stops.
+        """
+        self.stop_requested = True
+
     def set_mutation_probability(self, p):
+        """
+        Set the probability of gene mutation. p should be in the range [0, 1]
+        """
         self.mutate_probability = constrain(p, 0, 1)
         return self.mutate_probability
 
     def get_gene_size(self):
+        """
+        Returns the number of genes in each individual's DNA
+        """
         return self.gene_size
 
     def _populate_random(self, pop_size, gene_size):
@@ -205,9 +216,20 @@ class Engine:
         self.population.set_individuals(new_individuals)
 
     def set_combinator(self, combinator):
+        """
+        A client can set a custom combinator object. The combinator object
+        must have a combine() method which the engine calls to combie two
+        parents to create a new individual for the next generation.
+        The combine() function should take to parent individuals and return a
+        vector of genes.
+        """
         self.combinator = combinator
 
     def for_each_custom_call(self, fn):
+        """
+        A client can use this to call a function for each individual in the
+        population. The individual is sent as parameter.
+        """
         self.population.for_each_custom_call(fn)
 
     def _evaluate_all(self, engine):
@@ -239,36 +261,26 @@ class Engine:
             i += 1
         #print('\n'.join(['{:.5f}'.format(x) for x in reversed(sorted(fitness_list))]))
 
-    def start(self):
-        if not self.started:
-            self.started = True
-            self.get_configuration()
-            self._populate_random(self.pop_size, self.gene_size)
-            self.client.on_generation_begin(self.generation)
-
-    def run_once(self):
-        if not self.started:
-            raise RuntimeError('You must start the engine first')
-
-        self._evaluate_all(self)
-        self.client.on_generation_end(self.generation)
-        self._evolve()
-        self.generation += 1
-        self.client.on_generation_begin(self.generation)
-
     def run(self):
-        self.done = False
-        while not self.done:
-            self.run_once()
-            if self.client.is_stop_requested():
+        """
+        This is the entry point for the simulation.
+        """
+        self.client.on_init(self)
+        self._get_configuration()
+        self._populate_random(self.pop_size, self.gene_size)
+        while True:
+            self.client.on_new_generation(self.generation)
+            self._evaluate_all(self)
+            self.client.on_evaluated(self.generation)
+            if self.stop_requested:
                 break
-
+            self._evolve()
+            self.generation += 1
 
 class BaseClient:
     """
-    Clients of the engine should subclass and override the
-    methods of this class.
-    For meaningful operation, at least the following need to be
+    Clients of the engine should subclass and override the methods of this
+    class. For meaningful operation, at least the following need to be
     overriden:
       * create_gene
       * create_individual
@@ -277,8 +289,7 @@ class BaseClient:
     def get_configuration(self):
         """
         Should return a dictionary with configuration options.
-        If an empty dictionary is returned, the default configuration
-        is used.
+        If an empty dictionary is returned, the default configuration is used.
         """
         return {}
 
@@ -295,15 +306,28 @@ class BaseClient:
         """
         raise NotImplementedError('You must subclass BaseClient')
 
-    def on_generation_begin(self, generation):
+    def on_init(self, engine):
         """
-        Called by the engine when a new generation starts.
+        Called by the engine before any other function in the client is called.
+        This allows you to do any setup before the simulation starts.
+        The engine object itself is passed as a parameter.
         """
         pass
 
-    def on_generation_end(self, generation):
+    def on_new_generation(self, generation):
         """
-        Called by the engine when a generation ends.
+        Called by the engine when a new generation is ready.
+        Implement your simulation loop here. Return when you have finished
+        simulating this generation. You can have your event handling code in
+        here too in case of interactive applications.
+        """
+        pass
+
+    def on_evaluated(self, generation):
+        """
+        Called by the engine when all individuals' fitness has been evaluated
+        in the current generation. This allows the client to calculate
+        statistics, show progress and similar.
         """
         pass
 
@@ -313,13 +337,6 @@ class BaseClient:
         """
         raise NotImplementedError('You must sublcass BaseClient')
 
-    def is_stop_requested(self):
-        """
-        Called by the engine during run() to determine if the
-        simulation should stop.
-        """
-        return False
-
 
 class ExampleClient(BaseClient):
     """
@@ -328,28 +345,26 @@ class ExampleClient(BaseClient):
 
     def __init__(self, target_text):
         super().__init__()
+        self.engine = None
         self.target = list(target_text)
         self.solution_found = False
         self.generation = 0
+
+    def on_init(self, engine):
+        self.engine = engine
 
     def get_configuration(self):
         return {'population_size': 8,
                 'dna_size': len(self.target)}
 
-    def on_generation_begin(self, generation):
+    def on_new_generation(self, generation):
         self.generation = generation
-
-    def on_generation_end(self, generation):
-        pass
 
     def create_gene(self):
         return random.choice(string.ascii_lowercase + ' ')
 
     def create_individual(self):
         return NullIndividual()
-
-    def is_stop_requested(self):
-        return self.solution_found
 
     def evaluate_fitness(self, ind):
         fitness = 2
@@ -360,6 +375,7 @@ class ExampleClient(BaseClient):
 
         if ind.get_genes() == self.target:
             self.solution_found = True
+            self.engine.request_stop()
             print('Found solution {} in {} generations.'.format(self.target, self.generation))
 
         return fitness
@@ -367,5 +383,4 @@ class ExampleClient(BaseClient):
 if __name__ == '__main__':
     client = ExampleClient('to be or not to be')
     engine = Engine(client)
-    engine.start()
     engine.run()

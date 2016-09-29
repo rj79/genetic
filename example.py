@@ -129,10 +129,10 @@ class Client(gengine.BaseClient):
         self.now = 0
         self.clock = Clock()
 
+        self.exit_requested = False
         self.draggables = []
         self.dragging = None
 
-        self.exit_requested = False
         self.best_time = None
         self.mutate_index = 4
 
@@ -190,15 +190,6 @@ class Client(gengine.BaseClient):
         angle = random() * 2 * pi;
         return Vector2D(cos(angle), sin(angle))
 
-    def on_generation_begin(self, generation):
-        self.complete_count = 0
-
-    def on_generation_end(self, generation):
-        print("Generation {} end".format(generation))
-        print('  Completed: {}'.format(self.complete_count))
-        if self.best_time:
-            print('  Best time: {:.3f}'.format(self.best_time))
-
     def check_pos(self, thing, t):
         if thing.pos.x < 0 or thing.pos.x > self.width or thing.pos.y < 0 or thing.pos.y > self.height:
             thing.crash(t)
@@ -222,15 +213,19 @@ class Client(gengine.BaseClient):
         p = self.engine.set_mutation_probability(MUTATION_SPEEDS[self.mutate_index])
         print('Mutation probability: {:.4f}'.format(p))
 
+    def request_stop(self):
+        self.engine.request_stop()
+        self.exit_requested = True
+
     def handle_input(self):
         events = pygame.event.get()
         for event in events:
             #print(event)
             if event.type == pygame.QUIT:
-                self.exit_requested = True
+                self.request_stop()
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
-                    self.exit_requested = True
+                    self.request_stop()
                 elif event.key == pygame.K_SPACE:
                     self.clock.toggle_pause()
                 elif event.key == pygame.K_m:
@@ -280,13 +275,13 @@ class Client(gengine.BaseClient):
                 return thing
         return None
 
-    def main_loop(self):
+    def on_init(self, engine):
         pygame.init()
         self.width = 600
         self.height = 600
         self.screen = pygame.display.set_mode((self.width, self.height))
         self.target = Target()
-        self.engine = gengine.Engine(self)
+        self.engine = engine
 
         self.target.set_radius(20)
         self.target.set_pos(self.width * 2 / 3, 2 * self.target.radius)
@@ -306,8 +301,10 @@ class Client(gengine.BaseClient):
         self.draggables.extend(self.obstacles)
         self.draggables.append(self.target)
 
+    def on_new_generation(self, generation):
+        self.complete_count = 0
+        self.clock.reset()
         self.clock.start()
-        self.engine.start()
         counter = 0
         while not self.exit_requested:
 
@@ -322,10 +319,7 @@ class Client(gengine.BaseClient):
 
                 counter += 1
                 if counter == self.engine.get_gene_size():
-                    self.engine.run_once()
-                    self.clock.reset()
-                    self.clock.start()
-                    counter = 0
+                    break
 
             self.screen.fill(BLACK)
             self.engine.for_each_custom_call(self.draw)
@@ -336,10 +330,14 @@ class Client(gengine.BaseClient):
             pygame.display.flip()
             time.sleep(0.01)
 
+    def on_evaluated(self, generation):
+        print("Generation {} end".format(generation))
+        print('  Completed: {}'.format(self.complete_count))
+        if self.best_time:
+            print('  Best time: {:.3f}'.format(self.best_time))
 
-def setup():
-    client = Client()
-    client.main_loop()
 
 if __name__ == '__main__':
-    setup()
+    client = Client()
+    engine = gengine.Engine(client)
+    engine.run()
