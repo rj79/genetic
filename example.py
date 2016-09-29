@@ -135,6 +135,7 @@ class Client(gengine.BaseClient):
 
         self.best_time = None
         self.mutate_index = 4
+        self.font = None
 
     def get_time(self):
         return pygame.time.get_ticks() / 1000
@@ -301,6 +302,12 @@ class Client(gengine.BaseClient):
         self.draggables.extend(self.obstacles)
         self.draggables.append(self.target)
 
+        self.font = pygame.font.SysFont('sans', 20)
+
+    def draw_text(self, text, x, y):
+        s = self.font.render(text, True, WHITE)
+        self.screen.blit(s, (x, y))
+
     def on_new_generation(self, generation):
         self.complete_count = 0
         self.clock.reset()
@@ -327,6 +334,8 @@ class Client(gengine.BaseClient):
                 ob.draw(self.screen)
 
             self.target.draw(self.screen)
+
+            self.draw_text('p={:.4f}'.format(self.engine.get_mutation_probability()), 4, 4)
             pygame.display.flip()
             time.sleep(0.01)
 

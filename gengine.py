@@ -172,6 +172,9 @@ class Engine:
         self.mutate_probability = constrain(p, 0, 1)
         return self.mutate_probability
 
+    def get_mutation_probability(self):
+        return self.mutate_probability
+
     def get_gene_size(self):
         """
         Returns the number of genes in each individual's DNA
