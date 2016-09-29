@@ -358,8 +358,12 @@ class Client(gengine.BaseClient):
             pickle.dump(data, f)
 
     def load(self):
-        with open(STATEFILE, 'rb') as f:
-            data = pickle.load(f)
+        data = None
+        try:
+            with open(STATEFILE, 'rb') as f:
+                data = pickle.load(f)
+        except:
+            return
         self.target = data['target']
         self.obstacles = data['obstacles']
         self.draggables = []
