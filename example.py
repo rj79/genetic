@@ -15,7 +15,8 @@ BLUE = (0, 0, 255)
 GREY = (128, 128, 128)
 YELLOW = (255, 255, 0)
 
-FORCE_FACTOR = 15.0
+FORCE_FACTOR = 40.0
+DRAG_FACTOR = 1
 
 MUTATION_SPEEDS = [0, 0.0001, 0.0002, 0.0005, 0.001, 0.002, 0.005, 0.01, 0.02, 0.5, 1.0]
 LEFT_BUTTON = 1
@@ -60,7 +61,8 @@ class Thing:
         self.pre_update(counter, dt)
 
         if self.active:
-            drag = self.velocity.scaled(-2)
+            v_size = self.velocity.size()
+            drag = self.velocity.scaled(-DRAG_FACTOR * pow(v_size, 2))
             self.apply_force(drag)
             self.velocity += self.accel.scaled(dt)
             self.pos += self.velocity
@@ -344,8 +346,8 @@ class Client(gengine.BaseClient):
 
             self.target.draw(self.screen)
 
-            self.draw_text('p={:.4f}'.format(self.engine.get_mutation_probability()), 4, 4)
-            self.draw_text('Generation: {}'.format(generation), 4, 24)
+            self.draw_text('m={:.4f}'.format(self.engine.get_mutation_probability()), 4, 4)
+            self.draw_text('generation: {}'.format(generation), 4, 24)
             self.draw_text('completed: {}'.format(self.latest_complete_count), 4, 44)
             if self.best_time:
                 self.draw_text('best time: {:.3f} s'.format(self.best_time), 4, 64)
