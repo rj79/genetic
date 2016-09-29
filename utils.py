@@ -1,5 +1,12 @@
 from math import sqrt
 
+def constrain(num, minimum, maximum):
+    if num < minimum:
+        num = minimum
+    if num > maximum:
+        num = maximum
+    return num
+
 class Vector2D:
     def __init__(self, x=0, y=0):
         self.x = x

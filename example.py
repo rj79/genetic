@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 from math import pow, cos, sin, pi
 from random import random, randrange, choice, randint
-from utils import Clock, Vector2D
+from utils import Clock, Vector2D, constrain
 import gengine
 import pygame
 import time
@@ -15,6 +15,8 @@ GREY = (128, 128, 128)
 YELLOW = (255, 255, 0)
 
 FORCE_FACTOR = 15.0
+
+MUTATION_SPEEDS = [0, 0.0001, 0.0002, 0.0005, 0.001, 0.002, 0.005, 0.01, 0.02, 0.5, 1.0]
 
 class Thing:
     def __init__(self):
@@ -127,6 +129,7 @@ class Client(gengine.BaseClient):
 
         self.exit_requested = False
         self.best_time = None
+        self.mutate_index = 4
 
     def get_time(self):
         return pygame.time.get_ticks() / 1000
@@ -134,7 +137,7 @@ class Client(gengine.BaseClient):
     def get_configuration(self):
         return {'population_size': 100,
                 'dna_size': 250,
-                'mutation_p': 0.001}
+                'mutation_p': MUTATION_SPEEDS[self.mutate_index]}
 
     def create_gene(self):
         size = random() * FORCE_FACTOR
@@ -208,6 +211,12 @@ class Client(gengine.BaseClient):
     def draw(self, thing):
         thing.draw(self.screen)
 
+    def change_mutation(self, delta):
+        self.mutate_index += delta
+        self.mutate_index = constrain(self.mutate_index, 0, len(MUTATION_SPEEDS) - 1)
+        p = self.engine.set_mutation_probability(MUTATION_SPEEDS[self.mutate_index])
+        print('Mutation probability: {:.4f}'.format(p))
+
     def handle_input(self):
         events = pygame.event.get()
         for event in events:
@@ -218,6 +227,10 @@ class Client(gengine.BaseClient):
                     self.exit_requested = True
                 elif event.key == pygame.K_SPACE:
                     self.clock.toggle_pause()
+                elif event.key == pygame.K_m:
+                    self.change_mutation(1)
+                elif event.key == pygame.K_n:
+                    self.change_mutation(-1)
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 thing = self.find_thing(event.pos)
                 if thing:
