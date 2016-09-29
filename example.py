@@ -368,7 +368,7 @@ class Client(gengine.BaseClient):
         self.obstacles = data['obstacles']
         self.draggables = []
         self.draggables.append(self.target)
-        self.draggables.append(self.obstacles)
+        self.draggables.extend(self.obstacles)
 
     def on_evaluated(self, generation):
         self.latest_complete_count = self.complete_count
