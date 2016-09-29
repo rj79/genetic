@@ -11,10 +11,10 @@ WHITE = (255, 255, 255)
 RED = (255, 0, 0)
 GREEN = (0, 255, 0)
 BLUE = (0, 0, 255)
+GREY = (128, 128, 128)
+YELLOW = (255, 255, 0)
 
-RADIUS = 10
 FORCE_FACTOR = 15.0
-
 
 class Thing:
     def __init__(self):
@@ -22,7 +22,7 @@ class Thing:
         self.velocity = Vector2D()
         self.accel = Vector2D()
         self.color = WHITE
-        self.radius = RADIUS
+        self.radius = 10
         self.active = True
 
     def apply_force(self, force):
@@ -93,11 +93,13 @@ class Creature(Thing):
         if not self.completed:
             self.completed = True
             self.arrival_time = t
+            self.color = YELLOW
 
     def crash(self, t):
         if not self.crashed:
             self.crashed = True
             self.arrival_time = t
+            self.color = GREY
 
     def has_completed(self):
         return self.completed
@@ -209,20 +211,22 @@ class Client(gengine.BaseClient):
     def handle_input(self):
         events = pygame.event.get()
         for event in events:
-            if event.type == pygame.KEYDOWN:
+            if event.type == pygame.QUIT:
+                self.exit_requested = True
+            elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
                     self.exit_requested = True
                 elif event.key == pygame.K_SPACE:
                     self.clock.toggle_pause()
-            if event.type == pygame.MOUSEBUTTONDOWN:
+            elif event.type == pygame.MOUSEBUTTONDOWN:
                 thing = self.find_thing(event.pos)
                 if thing:
                     self.dragging = thing
                     pos = event.pos
                     self.drag_offset = self.dragging.pos - Vector2D(pos[0], pos[1])
-            if event.type == pygame.MOUSEBUTTONUP:
+            elif event.type == pygame.MOUSEBUTTONUP:
                 self.dragging = None
-            if event.type == pygame.MOUSEMOTION:
+            elif event.type == pygame.MOUSEMOTION:
                 if self.dragging:
                     pos = event.pos
                     x = Vector2D(pos[0], pos[1])
