@@ -2,3 +2,4 @@ venv
 __*__
 *~
 .done_*
+state.pickle

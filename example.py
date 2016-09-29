@@ -5,6 +5,7 @@ from utils import Clock, Vector2D, constrain
 import gengine
 import pygame
 import time
+import pickle
 
 BLACK = (0, 0, 0)
 WHITE = (255, 255, 255)
@@ -22,6 +23,9 @@ MIDDLE_BUTTON = 2
 RIGHT_BUTTON = 3
 SCROLL_UP = 4
 SCROLL_DOWN = 5
+
+STATEFILE = 'state.pickle'
+
 
 class Thing:
     def __init__(self):
@@ -234,6 +238,10 @@ class Client(gengine.BaseClient):
                     self.change_mutation(1)
                 elif event.key == pygame.K_n:
                     self.change_mutation(-1)
+                elif event.key == pygame.K_F5:
+                    self.save()
+                elif event.key == pygame.K_F9:
+                    self.load()
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 thing = self.find_thing(event.pos)
                 if event.button == LEFT_BUTTON:
@@ -342,6 +350,21 @@ class Client(gengine.BaseClient):
                 self.draw_text('best time: {:.3f} s'.format(self.best_time), 4, 44)
             pygame.display.flip()
             time.sleep(0.01)
+
+    def save(self):
+        data = {'target': self.target,
+                'obstacles': self.obstacles}
+        with open(STATEFILE, 'wb') as f:
+            pickle.dump(data, f)
+
+    def load(self):
+        with open(STATEFILE, 'rb') as f:
+            data = pickle.load(f)
+        self.target = data['target']
+        self.obstacles = data['obstacles']
+        self.draggables = []
+        self.draggables.append(self.target)
+        self.draggables.append(self.obstacles)
 
     def on_evaluated(self, generation):
         self.latest_complete_count = self.complete_count
