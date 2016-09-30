@@ -43,6 +43,7 @@ class Thing:
         self.color = WHITE
         self.radius = 10
         self.active = True
+        self.removable = False
 
     def apply_force(self, force):
         self.accel += force
@@ -89,6 +90,7 @@ class Obstacle(Thing):
         super().__init__()
         self.color = RED
         self.radius = 20
+        self.removable = True
 
 
 class Target(Thing):
@@ -140,10 +142,10 @@ class Creature(Thing):
         return self.crashed
 
     def pre_update(self, counter, dt):
-        self.apply_force(self.ind.get_gene(counter))
-
         if self.crashed or self.completed:
             self.active = False
+        else:
+            self.apply_force(self.ind.get_gene(counter))
 
 
 class Client(gengine.BaseClient):
@@ -164,6 +166,8 @@ class Client(gengine.BaseClient):
         self.best_time = None
         self.mutate_index = 4
         self.font = None
+
+        self.all_inactive = True
 
     def get_time(self):
         return pygame.time.get_ticks() / 1000
@@ -202,6 +206,12 @@ class Client(gengine.BaseClient):
 
         arrival_factor = obj.arrival_time / self.now
 
+        # Special case if individual arrives right away. This can happen for
+        # instance if target and launcher are extremeoy close, so it's kind of
+        # invalid, so just avoid division by zero.
+        if arrival_factor == 0:
+            arrival_factor = 1
+
         if obj.has_crashed():
             # Give more penalty to objects that crashed early
             fitness *= pow(arrival_factor, 3)
@@ -230,6 +240,9 @@ class Client(gengine.BaseClient):
             if thing.pos.distance(obstacle.pos) < thing.radius + obstacle.radius:
                 thing.crash(t)
 
+        if thing.active:
+            self.all_inactive = False
+
     def update(self, thing, counter, dt):
         thing.update(counter, dt)
 
@@ -249,7 +262,6 @@ class Client(gengine.BaseClient):
     def handle_input(self):
         events = pygame.event.get()
         for event in events:
-            #print(event)
             if event.type == pygame.QUIT:
                 self.request_stop()
             elif event.type == pygame.KEYDOWN:
@@ -279,7 +291,7 @@ class Client(gengine.BaseClient):
                         self.obstacles.append(new_obstacle)
                         self.draggables.append(new_obstacle)
                     else:
-                        if thing != self.target:
+                        if thing.removable:
                             self.obstacles.remove(thing)
                             self.draggables.remove(thing)
                 elif event.button == SCROLL_UP:
@@ -366,7 +378,7 @@ class Client(gengine.BaseClient):
         self.clock.start()
         counter = 0
         while not self.exit_requested:
-
+            self.all_inactive = True
             self.handle_input()
 
             if not self.clock.is_paused():
@@ -377,7 +389,7 @@ class Client(gengine.BaseClient):
                 self.engine.for_each_custom_call(lambda x: self.check_pos(x, self.now))
 
                 counter += 1
-                if counter == self.engine.get_gene_size():
+                if counter == self.engine.get_gene_size() or self.all_inactive:
                     break
 
             self.draw_everything(generation)
