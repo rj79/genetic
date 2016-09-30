@@ -14,6 +14,7 @@ GREEN = (0, 255, 0)
 BLUE = (0, 0, 255)
 GREY = (128, 128, 128)
 YELLOW = (255, 255, 0)
+DARK_PINK = (128, 0, 128)
 
 FORCE_FACTOR = 40.0
 DRAG_FACTOR = 1
@@ -89,10 +90,22 @@ class Obstacle(Thing):
         self.color = RED
         self.radius = 20
 
+
 class Target(Thing):
     def __init__(self):
         super().__init__()
         self.color = GREEN
+
+
+class Launcher(Thing):
+    def __init__(self):
+        super().__init__()
+        self.color = DARK_PINK
+        self.radius = 15
+
+    def set_radius(self, radius):
+        # Don't allow radius to be changed
+        pass
 
 
 class Creature(Thing):
@@ -145,6 +158,8 @@ class Client(gengine.BaseClient):
         self.exit_requested = False
         self.draggables = []
         self.dragging = None
+        self.launcher = None
+        self.target = None
 
         self.best_time = None
         self.mutate_index = 4
@@ -164,7 +179,7 @@ class Client(gengine.BaseClient):
 
     def create_individual(self):
         c = Creature()
-        c.set_pos(self.width / 2, self.height - 100)
+        c.set_pos(self.launcher.pos.x, self.launcher.pos.y)
         return c
 
     def evaluate_fitness(self, ind):
@@ -269,10 +284,10 @@ class Client(gengine.BaseClient):
                             self.draggables.remove(thing)
                 elif event.button == SCROLL_UP:
                     if thing is not None:
-                        thing.radius = constrain(thing.radius + 10, 10, 100)
+                        thing.set_radius(constrain(thing.radius + 10, 10, 100))
                 elif event.button == SCROLL_DOWN:
                     if thing is not None:
-                        thing.radius = constrain(thing.radius - 10, 10, 100)
+                        thing.set_radius(constrain(thing.radius - 10, 10, 100))
 
             elif event.type == pygame.MOUSEBUTTONUP:
                 self.dragging = None
@@ -301,6 +316,9 @@ class Client(gengine.BaseClient):
         self.target = Target()
         self.engine = engine
 
+        self.launcher = Launcher()
+        self.launcher.set_pos(self.width / 2, self.height - 100)
+
         self.target.set_radius(20)
         self.target.set_pos(self.width * 2 / 3, 2 * self.target.radius)
 
@@ -316,6 +334,7 @@ class Client(gengine.BaseClient):
         self.obstacles.append(ob1)
         self.obstacles.append(ob2)
 
+        self.draggables.append(self.launcher)
         self.draggables.extend(self.obstacles)
         self.draggables.append(self.target)
 
@@ -324,6 +343,23 @@ class Client(gengine.BaseClient):
     def draw_text(self, text, x, y):
         s = self.font.render(text, True, WHITE)
         self.screen.blit(s, (x, y))
+
+    def draw_everything(self, generation):
+        self.screen.fill(BLACK)
+
+        self.engine.for_each_custom_call(self.draw)
+        for ob in self.obstacles:
+            ob.draw(self.screen)
+
+        self.launcher.draw(self.screen)
+        self.target.draw(self.screen)
+
+        self.draw_text('m={:.4f}'.format(self.engine.get_mutation_probability()), 4, 4)
+        self.draw_text('generation: {}'.format(generation), 4, 24)
+        self.draw_text('completed: {}'.format(self.latest_complete_count), 4, 44)
+        if self.best_time:
+            self.draw_text('best time: {:.3f} s'.format(self.best_time), 4, 64)
+        pygame.display.flip()
 
     def on_new_generation(self, generation):
         self.complete_count = 0
@@ -345,19 +381,7 @@ class Client(gengine.BaseClient):
                 if counter == self.engine.get_gene_size():
                     break
 
-            self.screen.fill(BLACK)
-            self.engine.for_each_custom_call(self.draw)
-            for ob in self.obstacles:
-                ob.draw(self.screen)
-
-            self.target.draw(self.screen)
-
-            self.draw_text('m={:.4f}'.format(self.engine.get_mutation_probability()), 4, 4)
-            self.draw_text('generation: {}'.format(generation), 4, 24)
-            self.draw_text('completed: {}'.format(self.latest_complete_count), 4, 44)
-            if self.best_time:
-                self.draw_text('best time: {:.3f} s'.format(self.best_time), 4, 64)
-            pygame.display.flip()
+            self.draw_everything(generation)
             time.sleep(0.01)
 
     def save(self):
