@@ -16,7 +16,7 @@ GREY = (128, 128, 128)
 YELLOW = (255, 255, 0)
 DARK_PINK = (128, 0, 128)
 
-FORCE_FACTOR = 40.0
+FORCE_FACTOR = 50.0
 DRAG_FACTOR = 1
 
 MUTATION_SPEEDS = [0,
@@ -170,7 +170,7 @@ class Client(gengine.BaseClient):
 
     def get_configuration(self):
         return {'population_size': 100,
-                'dna_size': 250,
+                'dna_size': 300,
                 'mutation_p': MUTATION_SPEEDS[self.mutate_index]}
 
     def create_gene(self):
