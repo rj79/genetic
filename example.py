@@ -297,9 +297,8 @@ class Client(gengine.BaseClient):
                     x = Vector2D(pos[0], pos[1])
                     self.dragging.pos = x + self.drag_offset
 
-                    # Invalidate best time if target was moved
-                    if self.dragging == self.target:
-                        self.best_time = None
+                    # Invalidate best time since circumstances have changed.
+                    self.best_time = None
 
     def find_thing(self, pos):
         x = Vector2D(pos[0], pos[1])
