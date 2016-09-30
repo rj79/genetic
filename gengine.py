@@ -101,6 +101,16 @@ class Population:
         """
         Select an individual based on fitness distribution
         """
+        # Special handling if all individuals have zero fitness
+        # In that case, just pick any
+        allzero = True
+        for ind in self.individuals:
+            if ind.fitness > 0:
+                allzero = False
+
+        if allzero:
+            return self.individuals[random.randint(0, len(self.individuals) - 1)]
+
         # Monte-Carlo style accept-reject algorithm
         # Assumes that fitness is normalized between 0 and 1
         timeout = 1000000
