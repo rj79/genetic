@@ -110,18 +110,14 @@ class Launcher(Thing):
         pass
 
 
-class Creature(Thing):
-    def __init__(self, dna=None):
+class Creature(Thing, gengine.BaseIndividualMixin):
+    def __init__(self):
         super().__init__()
         self.color = BLUE
         self.fitness = 0
         self.crashed = False
         self.completed = False
-        self.ind = None
         self.arrival_time = None
-
-    def set_individual(self, ind):
-        self.ind = ind
 
     def complete(self, t):
         if not self.completed:
@@ -145,8 +141,9 @@ class Creature(Thing):
         if self.crashed or self.completed:
             self.active = False
         else:
-            self.apply_force(self.ind.get_gene(counter))
+            self.apply_force(self.get_dna()[counter])
 
+DNA_SIZE = 300
 
 class Client(gengine.BaseClient):
     def __init__(self):
@@ -168,18 +165,27 @@ class Client(gengine.BaseClient):
         self.font = None
 
         self.all_inactive = True
+        self.generation = 0
 
     def get_time(self):
         return pygame.time.get_ticks() / 1000
 
     def get_configuration(self):
         return {'population_size': 100,
-                'dna_size': 300,
                 'mutation_p': MUTATION_SPEEDS[self.mutate_index]}
 
-    def create_gene(self):
+    def create_dna(self):
+        dna = []
+        for i in range(DNA_SIZE):
+            size = random() * FORCE_FACTOR
+            dna.append(self.create_random_unit_vector().scaled(size))
+        return dna
+
+    def mutate_dna(self, dna):
+        i = randint(0, len(dna) - 1)
         size = random() * FORCE_FACTOR
-        return self.create_random_unit_vector().scaled(size)
+        dna[i] = self.create_random_unit_vector().scaled(size)
+        return dna
 
     def create_individual(self):
         c = Creature()
@@ -187,9 +193,7 @@ class Client(gengine.BaseClient):
         return c
 
     def evaluate_fitness(self, ind):
-        obj = ind.custom_object
-
-        d = obj.pos.distance(self.target.pos)
+        d = ind.pos.distance(self.target.pos)
 
         # Avoid division by 0.
         if d < 1:
@@ -201,10 +205,10 @@ class Client(gengine.BaseClient):
         # The arrival factor is the arrival time normalized
         # between 0 and 1, where 0 represents the start of
         # the simulation and 1 the end of the simulation.
-        if obj.arrival_time is None:
-            obj.arrival_time = self.now
+        if ind.arrival_time is None:
+            ind.arrival_time = self.now
 
-        arrival_factor = obj.arrival_time / self.now
+        arrival_factor = ind.arrival_time / self.now
 
         # Special case if individual arrives right away. This can happen for
         # instance if target and launcher are extremeoy close, so it's kind of
@@ -212,15 +216,15 @@ class Client(gengine.BaseClient):
         if arrival_factor == 0:
             arrival_factor = 1
 
-        if obj.has_crashed():
+        if ind.has_crashed():
             # Give more penalty to objects that crashed early
             fitness *= pow(arrival_factor, 3)
-        if obj.has_completed():
+        if ind.has_completed():
             # Boost objects that completed early
             fitness /= (pow(arrival_factor, 3))
 
-            if self.best_time is None or obj.arrival_time < self.best_time:
-                self.best_time = obj.arrival_time
+            if self.best_time is None or ind.arrival_time < self.best_time:
+                self.best_time = ind.arrival_time
 
             self.complete_count += 1
         return fitness
@@ -256,7 +260,6 @@ class Client(gengine.BaseClient):
         print('Mutation probability: {:.4f}'.format(p))
 
     def request_stop(self):
-        self.engine.request_stop()
         self.exit_requested = True
 
     def handle_input(self):
@@ -358,7 +361,9 @@ class Client(gengine.BaseClient):
     def draw_everything(self, generation):
         self.screen.fill(BLACK)
 
-        self.engine.for_each_custom_call(self.draw)
+        for ind in self.engine.population_iterator():
+            self.draw(ind)
+
         for ob in self.obstacles:
             ob.draw(self.screen)
 
@@ -372,7 +377,8 @@ class Client(gengine.BaseClient):
             self.draw_text('best time: {:.3f} s'.format(self.best_time), 4, 64)
         pygame.display.flip()
 
-    def on_new_generation(self, generation):
+    def start(self):
+        engine.initialize()
         self.complete_count = 0
         self.clock.reset()
         self.clock.start()
@@ -385,15 +391,25 @@ class Client(gengine.BaseClient):
                 self.now = self.clock.get_time()
                 dt = self.clock.get_dt()
 
-                self.engine.for_each_custom_call(lambda x: self.update(x, counter, dt))
-                self.engine.for_each_custom_call(lambda x: self.check_pos(x, self.now))
+                for ind in self.engine.population_iterator():
+                    self.update(ind, counter, dt)
+
+                for ind in self.engine.population_iterator():
+                    self.check_pos(ind, self.now)
 
                 counter += 1
-                if counter == self.engine.get_gene_size() or self.all_inactive:
-                    break
+                if counter == DNA_SIZE or self.all_inactive:
+                    self.engine.evolve()
+                    counter = 0
+                    self.complete_count = 0
+                    self.clock.reset()
+                    self.clock.start()
 
-            self.draw_everything(generation)
+            self.draw_everything(self.generation)
             time.sleep(0.01)
+
+    def on_new_population(self, generation):
+        self.generation = generation
 
     def save(self):
         data = {'target': self.target,
@@ -426,4 +442,4 @@ class Client(gengine.BaseClient):
 if __name__ == '__main__':
     client = Client()
     engine = gengine.Engine(client)
-    engine.run()
+    client.start()
