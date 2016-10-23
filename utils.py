@@ -75,13 +75,10 @@ class Clock:
         self.epoch = 0
         self.paused = False
 
-    def get_time(self):
+    def get_time_and_delta(self):
         self.old_now = self.now
         self.now = self._read() - self.epoch
-        return self.now
-
-    def get_dt(self):
-        return self.now - self.old_now
+        return self.now, self.now - self.old_now
 
     def toggle_pause(self):
         if not self.paused:
