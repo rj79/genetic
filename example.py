@@ -167,9 +167,6 @@ class Client(gengine.BaseClient):
         self.all_inactive = True
         self.generation = 0
 
-    def get_time(self):
-        return pygame.time.get_ticks() / 1000
-
     def get_configuration(self):
         return {'population_size': 100,
                 'mutation_p': MUTATION_SPEEDS[self.mutate_index]}
@@ -383,30 +380,41 @@ class Client(gengine.BaseClient):
         self.clock.reset()
         self.clock.start()
         counter = 0
+        accumulator = 0.0
+        dt = 0.01
         while not self.exit_requested:
             self.all_inactive = True
             self.handle_input()
 
             if not self.clock.is_paused():
-                self.now = self.clock.get_time()
-                dt = self.clock.get_dt()
+                self.now, frame_time = self.clock.get_time_and_delta()
+                if frame_time > 0.25:
+                    print("Warning: Frame rate low!")
+                    frame_time = 0.25
 
-                for ind in self.engine.population_iterator():
-                    self.update(ind, counter, dt)
+                accumulator += frame_time
 
-                for ind in self.engine.population_iterator():
-                    self.check_pos(ind, self.now)
+                while accumulator >= dt:
+                    for ind in self.engine.population_iterator():
+                        self.update(ind, counter, dt)
 
-                counter += 1
-                if counter == DNA_SIZE or self.all_inactive:
-                    self.engine.evolve()
-                    counter = 0
-                    self.complete_count = 0
-                    self.clock.reset()
-                    self.clock.start()
+                    for ind in self.engine.population_iterator():
+                        self.check_pos(ind, self.now)
+
+                    accumulator -= dt
+                    self.now += dt
+
+                    counter += 1
+                    if counter == DNA_SIZE or self.all_inactive:
+                        self.engine.evolve()
+                        counter = 0
+                        self.complete_count = 0
+                        self.clock.reset()
+                        self.clock.start()
+            else:
+                time.sleep(0.1)
 
             self.draw_everything(self.generation)
-            time.sleep(0.01)
 
     def on_new_population(self, generation):
         self.generation = generation
